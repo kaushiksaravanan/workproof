@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Peggy Design System Colors — extracted 1:1 from reference image -->
+<resources>
+  <!-- Brand -->
+  <color name="peggy_blue">#7DA1FF</color>
+  <color name="peggy_lavender">#CAD9F6</color>
+  <color name="peggy_ink">#001A33</color>
+  <color name="peggy_surface">#FFFFFF</color>
+
+  <!-- Accents -->
+  <color name="peggy_yellow">#FFD84D</color>
+  <color name="peggy_coral">#F0445B</color>
+  <color name="peggy_mint">#C9EFC3</color>
+  <color name="peggy_amber">#BD814B</color>
+
+  <!-- Neutrals -->
+  <color name="peggy_gray">#6B7280</color>
+  <color name="peggy_hairline">#E5E7EB</color>
+  <color name="peggy_page">#E3E3E3</color>
+
+  <!-- Material 3 role aliases -->
+  <color name="md_theme_primary">@color/peggy_blue</color>
+  <color name="md_theme_onPrimary">@color/peggy_ink</color>
+  <color name="md_theme_primaryContainer">@color/peggy_lavender</color>
+  <color name="md_theme_onPrimaryContainer">@color/peggy_ink</color>
+  <color name="md_theme_secondary">@color/peggy_lavender</color>
+  <color name="md_theme_onSecondary">@color/peggy_ink</color>
+  <color name="md_theme_surface">@color/peggy_surface</color>
+  <color name="md_theme_onSurface">@color/peggy_ink</color>
+  <color name="md_theme_surfaceVariant">@color/peggy_lavender</color>
+  <color name="md_theme_onSurfaceVariant">@color/peggy_ink</color>
+  <color name="md_theme_background">@color/peggy_page</color>
+  <color name="md_theme_onBackground">@color/peggy_ink</color>
+  <color name="md_theme_error">@color/peggy_coral</color>
+  <color name="md_theme_onError">@color/peggy_surface</color>
+  <color name="md_theme_outline">@color/peggy_hairline</color>
+  <color name="md_theme_outlineVariant">@color/peggy_lavender</color>
+  <color name="md_theme_scrim">@color/peggy_ink</color>
+  <color name="md_theme_inverseSurface">@color/peggy_ink</color>
+  <color name="md_theme_inverseOnSurface">@color/peggy_surface</color>
+  <color name="md_theme_inversePrimary">@color/peggy_blue</color>
+
+  <!-- Tertiary (maps to amber for chips / CTAs) -->
+  <color name="md_theme_tertiary">@color/peggy_amber</color>
+  <color name="md_theme_onTertiary">@color/peggy_ink</color>
+  <color name="md_theme_tertiaryContainer">@color/peggy_yellow</color>
+  <color name="md_theme_onTertiaryContainer">@color/peggy_ink</color>
+
+  <!-- Dark mode -->
+  <color name="peggy_page_dark">#0E1120</color>
+  <color name="peggy_surface_dark">#1A1F35</color>
+  <color name="peggy_ink_dark">#E8ECF8</color>
+  <color name="md_theme_primary_dark">@color/peggy_blue</color>
+  <color name="md_theme_onPrimary_dark">@color/peggy_ink</color>
+  <color name="md_theme_surface_dark">@color/peggy_surface_dark</color>
+  <color name="md_theme_onSurface_dark">@color/peggy_ink_dark</color>
+  <color name="md_theme_background_dark">@color/peggy_page_dark</color>
+</resources>

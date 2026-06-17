@@ -1,0 +1,33 @@
+name: Accessibility Audit
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  axe-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+      - run: npm ci
+      - run: npx playwright install chromium
+      - name: Build app
+        run: npm run build
+      - name: Start preview server
+        run: npm run preview &
+      - name: Wait for server
+        run: npx wait-on http://localhost:3000 --timeout 30000
+      - name: Run axe-core scan
+        run: npx tsx scripts/a11y-axe.ts
+      - name: Run WCAG contrast audit
+        run: npx tsx scripts/a11y-contrast.ts
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        with:
+          name: a11y-report
+          path: a11y-report/

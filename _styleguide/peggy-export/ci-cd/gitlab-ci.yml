@@ -1,0 +1,19 @@
+stages:
+  - test
+
+a11y_audit:
+  stage: test
+  image: node:20
+  before_script:
+    - npm ci
+    - npx playwright install chromium
+  script:
+    - npm run build
+    - npm run preview &
+    - npx wait-on http://localhost:3000 --timeout 30000
+    - npx tsx scripts/a11y-axe.ts
+    - npx tsx scripts/a11y-contrast.ts
+  artifacts:
+    paths:
+      - a11y-report/
+    expire_in: 30 days

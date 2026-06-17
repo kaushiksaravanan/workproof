@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Peggy Spacing & Radius Tokens — 4dp base grid -->
+<resources>
+  <!-- Spacing -->
+  <dimen name="peggy_space_0">0dp</dimen>
+  <dimen name="peggy_space_1">4dp</dimen>
+  <dimen name="peggy_space_2">8dp</dimen>
+  <dimen name="peggy_space_3">12dp</dimen>
+  <dimen name="peggy_space_4">16dp</dimen>
+  <dimen name="peggy_space_5">20dp</dimen>
+  <dimen name="peggy_space_6">24dp</dimen>
+  <dimen name="peggy_space_8">32dp</dimen>
+  <dimen name="peggy_space_10">40dp</dimen>
+  <dimen name="peggy_space_12">48dp</dimen>
+
+  <!-- Radius -->
+  <dimen name="peggy_radius_sm">12dp</dimen>
+  <dimen name="peggy_radius_md">20dp</dimen>
+  <dimen name="peggy_radius_lg">28dp</dimen>
+  <dimen name="peggy_radius_pill">999dp</dimen>
+
+  <!-- Touch targets (WCAG / Apple HIG) -->
+  <dimen name="peggy_min_tap">48dp</dimen>
+  <dimen name="peggy_min_tap_compact">44dp</dimen>
+
+  <!-- Shadows (elevation in dp) -->
+  <dimen name="peggy_elevation_card">8dp</dimen>
+  <dimen name="peggy_elevation_pressed">12dp</dimen>
+
+  <!-- Illustration sizing -->
+  <dimen name="peggy_doodle_hero">256dp</dimen>
+  <dimen name="peggy_doodle_card">176dp</dimen>
+  <dimen name="peggy_doodle_family">160dp</dimen>
+  <dimen name="peggy_plane_max">32dp</dimen>
+  <dimen name="peggy_plane_min">16dp</dimen>
+</resources>

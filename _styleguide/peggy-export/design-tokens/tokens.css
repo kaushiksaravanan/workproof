@@ -1,0 +1,71 @@
+:root {
+  /* Peggy brand — sampled 1:1 from reference */
+  --peggy-blue: oklch(0.74 0.13 268);       /* #7DA1FF cornflower panel */
+  --peggy-lavender: oklch(0.87 0.05 263);   /* #CAD9F6 card tint */
+  --peggy-ink: oklch(0.18 0.06 263);        /* #001A33 near-black navy */
+  --peggy-yellow: oklch(0.90 0.16 95);      /* #FFD84D marker */
+  --peggy-coral: oklch(0.66 0.22 18);       /* #F0445B NEW badge */
+  --peggy-mint: oklch(0.92 0.08 145);       /* #C9EFC3 event chip */
+  --peggy-amber: oklch(0.62 0.11 55);       /* #BD814B tab */
+
+  /* Semantic */
+  --background: oklch(0.91 0 0);            /* #E3E3E3 page gray */
+  --foreground: var(--peggy-ink);
+  --card: oklch(1 0 0);
+  --card-foreground: var(--peggy-ink);
+  --popover: oklch(1 0 0);
+  --popover-foreground: var(--peggy-ink);
+  --primary: var(--peggy-blue);
+  --primary-foreground: var(--peggy-ink);
+  --secondary: var(--peggy-lavender);
+  --secondary-foreground: var(--peggy-ink);
+  --muted: oklch(0.96 0.005 264);
+  --muted-foreground: oklch(0.42 0.03 263);
+  --accent: var(--peggy-yellow);
+  --accent-foreground: var(--peggy-ink);
+  --destructive: oklch(0.62 0.22 25);
+  --destructive-foreground: oklch(1 0 0);
+  --border: oklch(0.88 0.01 263);
+  --input: oklch(0.88 0.01 263);
+  --ring: var(--peggy-blue);
+
+  /* Typography */
+  --font-display: "Fraunces", ui-serif, Georgia, serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+
+  /* Spacing (rem = 16px base) */
+  --space-1: 0.25rem;   /* 4px */
+  --space-2: 0.5rem;    /* 8px */
+  --space-3: 0.75rem;   /* 12px */
+  --space-4: 1rem;      /* 16px */
+  --space-5: 1.25rem;   /* 20px */
+  --space-6: 1.5rem;    /* 24px */
+  --space-8: 2rem;      /* 32px */
+
+  /* Radius */
+  --radius-sm: 0.75rem;   /* 12px */
+  --radius-md: 1.25rem;   /* 20px */
+  --radius-lg: 1.75rem;   /* 28px */
+  --radius-pill: 9999px;
+
+  /* Shadows */
+  --shadow-card: 0 8px 24px oklch(0.2 0.08 268 / 0.10);
+  --shadow-soft: 0 4px 12px oklch(0.2 0.08 268 / 0.06);
+  --shadow-pressed: 0 16px 36px oklch(0.2 0.08 268 / 0.14);
+}
+
+.dark {
+  --background: oklch(0.18 0.04 268);
+  --foreground: oklch(0.98 0.003 264);
+  --card: oklch(0.24 0.06 268);
+  --card-foreground: oklch(0.98 0.003 264);
+  --primary: var(--peggy-blue);
+  --primary-foreground: oklch(1 0 0);
+  --secondary: oklch(0.28 0.05 268);
+  --secondary-foreground: oklch(0.98 0.003 264);
+  --muted: oklch(0.28 0.05 268);
+  --muted-foreground: oklch(0.72 0.02 264);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: var(--peggy-blue);
+}

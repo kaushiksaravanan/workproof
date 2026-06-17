@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>WorkProof — Pitch Deck</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@1,9..144,500;1,9..144,700;1,9..144,900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  /* ---------- Theme ---------- */
+  :root {
+    --blue: #7DA1FF;
+    --lavender: #CAD9F6;
+    --ink: #001A33;
+    --yellow: #FFD84D;
+    --red: #F0445B;
+    --mint: #C9EFC3;
+    --tan: #BD814B;
+    --paper: #FBF8F1;
+    --sans: 'Plus Jakarta Sans', system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    --serif: 'Fraunces', Georgia, serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: var(--sans);
+    color: var(--ink);
+    background: var(--paper);
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  /* ---------- Marker underline utility ---------- */
+  .marker {
+    background-image: linear-gradient(180deg, transparent 60%, var(--yellow) 60%, var(--yellow) 95%, transparent 95%);
+    background-repeat: no-repeat;
+    background-size: 100% 100%;
+    padding: 0 .08em;
+    border-radius: 2px;
+  }
+  .marker-red {
+    background-image: linear-gradient(180deg, transparent 60%, var(--red) 60%, var(--red) 95%, transparent 95%);
+    color: var(--paper);
+  }
+
+  /* ---------- Deck shell ---------- */
+  .deck {
+    position: relative;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+  }
+  .slide {
+    position: absolute;
+    inset: 0;
+    padding: 6vh 8vw;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transform: translateX(40px);
+    transition: opacity .45s ease, transform .45s ease;
+    will-change: opacity, transform;
+  }
+  .slide.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateX(0);
+  }
+  .slide.prev { transform: translateX(-40px); }
+
+  .slide-num {
+    position: absolute;
+    top: 28px;
+    left: 32px;
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--ink);
+    opacity: .55;
+    letter-spacing: .02em;
+  }
+  .slide-tag {
+    position: absolute;
+    top: 28px;
+    right: 32px;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: .18em;
+    color: var(--ink);
+    opacity: .55;
+  }
+
+  h1, h2, h3 { margin: 0; }
+  h2.kicker {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 500;
+    font-size: clamp(36px, 5vw, 64px);
+    line-height: 1.05;
+    margin-bottom: .35em;
+  }
+  p.lede {
+    font-size: clamp(16px, 1.4vw, 20px);
+    max-width: 60ch;
+    line-height: 1.55;
+    color: var(--ink);
+    opacity: .8;
+  }
+
+  /* ---------- Slide 1: Title ---------- */
+  .title-slide {
+    align-items: center;
+    text-align: center;
+    background:
+      radial-gradient(900px 600px at 75% 20%, rgba(125,161,255,.18), transparent 60%),
+      radial-gradient(700px 500px at 15% 85%, rgba(202,217,246,.5), transparent 60%),
+      var(--paper);
+  }
+  .wp-title {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 900;
+    font-size: clamp(96px, 18vw, 260px);
+    line-height: .9;
+    letter-spacing: -.02em;
+    color: var(--ink);
+    position: relative;
+    z-index: 2;
+  }
+  .wp-tagline {
+    margin-top: 24px;
+    font-family: var(--sans);
+    font-size: clamp(16px, 1.6vw, 22px);
+    font-weight: 500;
+    color: var(--ink);
+    opacity: .75;
+    z-index: 2;
+    position: relative;
+  }
+  .plane-flock {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+    overflow: hidden;
+  }
+  .plane {
+    position: absolute;
+    width: 38px;
+    height: 38px;
+    opacity: .85;
+    animation: planeFly linear infinite;
+    filter: drop-shadow(0 4px 6px rgba(0,26,51,.12));
+  }
+  .plane svg { width: 100%; height: 100%; display: block; }
+  @keyframes planeFly {
+    0%   { transform: translate(-15vw, 0) rotate(-12deg); opacity: 0; }
+    8%   { opacity: .9; }
+    50%  { transform: translate(50vw, -8vh) rotate(-6deg); }
+    92%  { opacity: .9; }
+    100% { transform: translate(120vw, -2vh) rotate(-12deg); opacity: 0; }
+  }
+
+  /* ---------- Slide 2: Problem ---------- */
+  .grid-3 {
+    margin-top: 40px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  .stat-card {
+    background: var(--lavender);
+    border-radius: 18px;
+    padding: 32px 28px;
+    border: 1.5px solid rgba(0,26,51,.08);
+    box-shadow: 0 1px 0 rgba(0,26,51,.04);
+    transition: transform .25s ease;
+  }
+  .stat-card:hover { transform: translateY(-4px); }
+  .stat-num {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 900;
+    font-size: clamp(56px, 7vw, 96px);
+    line-height: 1;
+    color: var(--ink);
+    margin-bottom: 12px;
+  }
+  .stat-label {
+    font-weight: 700;
+    font-size: 16px;
+    margin-bottom: 8px;
+    letter-spacing: .02em;
+  }
+  .stat-detail {
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--ink);
+    opacity: .72;
+  }
+
+  /* ---------- Slide 3: Demo flow ---------- */
+  .timeline {
+    margin-top: 50px;
+    display: grid;
+    grid-template-columns: 1fr auto 1fr auto 1fr auto 1fr;
+    align-items: center;
+    gap: 12px;
+  }
+  .step {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 16px;
+    padding: 20px 18px;
+    position: relative;
+    min-height: 180px;
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+  .step .step-num {
+    position: absolute;
+    top: -16px;
+    left: -16px;
+    width: 36px;
+    height: 36px;
+    background: var(--yellow);
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 900;
+    font-size: 18px;
+  }
+  .step h3 {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 700;
+    font-size: 22px;
+    margin-bottom: 10px;
+  }
+  .step p {
+    margin: 0;
+    font-size: 13px;
+    line-height: 1.5;
+    opacity: .78;
+  }
+  .arrow svg {
+    width: 56px;
+    height: 28px;
+    display: block;
+  }
+
+  /* ---------- Slide 4: Architecture ---------- */
+  .arch {
+    margin-top: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  .node {
+    flex: 1;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 18px;
+    padding: 22px 18px;
+    text-align: center;
+    box-shadow: 4px 4px 0 var(--ink);
+    min-height: 160px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .node.client     { background: var(--mint); }
+  .node.llm        { background: var(--lavender); }
+  .node.hash       { background: var(--yellow); }
+  .node.chain      { background: var(--blue); color: var(--paper); }
+  .node .icon {
+    width: 48px; height: 48px;
+    margin-bottom: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 900;
+    font-size: 28px;
+    border: 2px solid var(--ink);
+    border-radius: 50%;
+    background: var(--paper);
+    color: var(--ink);
+  }
+  .node h3 {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 700;
+    font-size: 18px;
+    margin-bottom: 6px;
+  }
+  .node p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    opacity: .82;
+  }
+  .arch-arrow {
+    flex: 0 0 auto;
+    color: var(--ink);
+  }
+  .arch-arrow svg { width: 44px; height: 24px; display: block; }
+  .arch-caption {
+    margin-top: 28px;
+    text-align: center;
+    font-family: var(--serif);
+    font-style: italic;
+    font-size: 18px;
+    opacity: .7;
+  }
+
+  /* ---------- Slide 5: Why it works ---------- */
+  .why-grid {
+    margin-top: 44px;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 24px;
+  }
+  .why-card {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 18px;
+    padding: 28px 26px;
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+  .why-card .badge {
+    display: inline-block;
+    padding: 6px 12px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+  }
+  .why-card.offline .badge   { background: var(--mint); }
+  .why-card.crypto  .badge   { background: var(--yellow); }
+  .why-card.chain   .badge   { background: var(--blue); color: var(--paper); }
+  .why-card h3 {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 700;
+    font-size: 26px;
+    margin-bottom: 12px;
+  }
+  .why-card p {
+    margin: 0;
+    font-size: 14px;
+    line-height: 1.55;
+    opacity: .8;
+  }
+
+  /* ---------- Slide 6: Tech stack chips ---------- */
+  .chip-cloud {
+    margin-top: 36px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px;
+    max-width: 1000px;
+  }
+  .chip {
+    background: var(--lavender);
+    color: var(--ink);
+    padding: 10px 18px;
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 15px;
+    border: 1.5px solid rgba(0,26,51,.08);
+    transition: transform .2s ease, background .2s ease;
+  }
+  .chip:hover { transform: translateY(-2px); background: var(--blue); color: var(--paper); }
+  .chip.alt { background: var(--mint); }
+  .chip.alt2 { background: var(--yellow); }
+
+  /* ---------- Slide 7: Team ---------- */
+  .team-grid {
+    margin-top: 40px;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 24px;
+  }
+  .member {
+    text-align: center;
+  }
+  .avatar {
+    width: 120px;
+    height: 120px;
+    border-radius: 50%;
+    margin: 0 auto 16px;
+    border: 3px solid var(--ink);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 900;
+    font-size: 44px;
+    color: var(--ink);
+    box-shadow: 4px 4px 0 var(--ink);
+  }
+  .avatar.a1 { background: var(--blue); color: var(--paper); }
+  .avatar.a2 { background: var(--yellow); }
+  .avatar.a3 { background: var(--mint); }
+  .avatar.a4 { background: var(--red); color: var(--paper); }
+  .member-name {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 700;
+    font-size: 22px;
+    margin-bottom: 4px;
+  }
+  .member-role {
+    font-size: 13px;
+    font-weight: 600;
+    opacity: .7;
+    letter-spacing: .04em;
+  }
+
+  /* ---------- Slide 8: Ask ---------- */
+  .ask-slide {
+    align-items: center;
+    text-align: center;
+    background:
+      radial-gradient(700px 500px at 25% 30%, rgba(255,216,77,.25), transparent 60%),
+      radial-gradient(700px 500px at 75% 70%, rgba(125,161,255,.18), transparent 60%),
+      var(--paper);
+  }
+  .ask-headline {
+    font-family: var(--serif);
+    font-style: italic;
+    font-weight: 900;
+    font-size: clamp(56px, 9vw, 140px);
+    line-height: .95;
+    letter-spacing: -.01em;
+  }
+  .ask-meta {
+    margin-top: 36px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: center;
+  }
+  .ask-pill {
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    border-radius: 999px;
+    padding: 12px 22px;
+    font-weight: 700;
+    font-size: 15px;
+    box-shadow: 3px 3px 0 var(--ink);
+  }
+  .ask-pill.y { background: var(--yellow); }
+  .ask-pill.b { background: var(--blue); color: var(--paper); }
+  .ask-pill.m { background: var(--mint); }
+
+  /* ---------- Dot indicator ---------- */
+  .dots {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    z-index: 50;
+    background: rgba(251, 248, 241, .8);
+    backdrop-filter: blur(8px);
+    padding: 10px 16px;
+    border-radius: 999px;
+    border: 1.5px solid rgba(0,26,51,.08);
+  }
+  .dot {
+    width: 10px; height: 10px;
+    border-radius: 50%;
+    background: rgba(0,26,51,.18);
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    transition: transform .2s ease, background .2s ease, width .2s ease;
+  }
+  .dot:hover { background: rgba(0,26,51,.4); }
+  .dot.active {
+    background: var(--ink);
+    width: 28px;
+    border-radius: 8px;
+  }
+
+  /* ---------- Nav arrows ---------- */
+  .nav-arrow {
+    position: fixed;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--paper);
+    border: 2px solid var(--ink);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+    box-shadow: 3px 3px 0 var(--ink);
+    transition: transform .15s ease;
+  }
+  .nav-arrow:hover { transform: translateY(-50%) scale(1.06); }
+  .nav-arrow:active { transform: translateY(-50%) translate(2px,2px); box-shadow: 1px 1px 0 var(--ink); }
+  .nav-arrow.prev { left: 20px; }
+  .nav-arrow.next { right: 20px; }
+  .nav-arrow svg { width: 22px; height: 22px; }
+
+  /* ---------- Responsive guards ---------- */
+  @media (max-width: 900px) {
+    .grid-3, .why-grid { grid-template-columns: 1fr; }
+    .team-grid { grid-template-columns: repeat(2, 1fr); }
+    .timeline { grid-template-columns: 1fr; }
+    .timeline .arrow { transform: rotate(90deg); margin: 4px auto; }
+    .arch { flex-direction: column; }
+    .arch-arrow { transform: rotate(90deg); }
+    .slide { padding: 6vh 6vw; }
+  }
+</style>
+</head>
+<body>
+<div class="deck" id="deck">
+
+  <!-- ============ SLIDE 1: TITLE ============ -->
+  <section class="slide title-slide active" data-slide="1">
+    <span class="slide-num">01 / 08</span>
+    <span class="slide-tag">Pitch · 2026</span>
+
+    <div class="plane-flock" id="flock"></div>
+
+    <h1 class="wp-title">
+      Work<span class="marker">Proof</span>
+    </h1>
+    <p class="wp-tagline">
+      On-device proof-of-work, anchored on-chain. Trust without surveillance.
+    </p>
+  </section>
+
+  <!-- ============ SLIDE 2: PROBLEM ============ -->
+  <section class="slide" data-slide="2">
+    <span class="slide-num">02 / 08</span>
+    <span class="slide-tag">Problem</span>
+
+    <h2 class="kicker">The remote-work trust gap is widening.</h2>
+    <p class="lede">Workers are surveilled. Employers are deceived. Neither side trusts the other — and the tools we ship make it worse.</p>
+
+    <div class="grid-3">
+      <div class="stat-card">
+        <div class="stat-num">78%</div>
+        <div class="stat-label">of remote workers</div>
+        <div class="stat-detail">report being monitored by invasive employer software — keystroke loggers, screenshot tooling, webcam checks.</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">$11B</div>
+        <div class="stat-label">in fraud per year</div>
+        <div class="stat-detail">lost to fake-work tools, mouse jigglers, and ghost employees gaming productivity dashboards.</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-num">0</div>
+        <div class="stat-label">cryptographic guarantees</div>
+        <div class="stat-detail">Today, "proof of work done" is a screenshot in Slack. It's faked, edited, and replayed every single day.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SLIDE 3: DEMO FLOW ============ -->
+  <section class="slide" data-slide="3">
+    <span class="slide-num">03 / 08</span>
+    <span class="slide-tag">How it works</span>
+
+    <h2 class="kicker">Four steps. <span class="marker">Zero servers.</span></h2>
+    <p class="lede">A worker captures their work, the phone proves it, and the chain remembers it. No cloud middleman ever sees the content.</p>
+
+    <div class="timeline">
+      <div class="step">
+        <div class="step-num">1</div>
+        <h3>Capture</h3>
+        <p>Open the WorkProof app. Snap a photo, dictate a voice note, or paste a code diff. Stays on device.</p>
+      </div>
+      <div class="arrow">
+        <svg viewBox="0 0 56 28" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round">
+          <path d="M2 14 C 18 4, 38 24, 52 14" />
+          <path d="M44 8 L52 14 L44 20" />
+        </svg>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <h3>Summarize</h3>
+        <p>An on-device LLM produces a concise, structured summary of what was done — never leaves the phone.</p>
+      </div>
+      <div class="arrow">
+        <svg viewBox="0 0 56 28" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round">
+          <path d="M2 14 C 18 24, 38 4, 52 14" />
+          <path d="M44 8 L52 14 L44 20" />
+        </svg>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <h3>Hash</h3>
+        <p>SHA-256 of the summary + timestamp + signer key. The hash is the only artifact that ever leaves the device.</p>
+      </div>
+      <div class="arrow">
+        <svg viewBox="0 0 56 28" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round">
+          <path d="M2 14 C 18 4, 38 24, 52 14" />
+          <path d="M44 8 L52 14 L44 20" />
+        </svg>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <h3>Anchor</h3>
+        <p>Hash is written to Polygon Amoy. Anyone can verify: "this work existed at this time" — forever, for fractions of a cent.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SLIDE 4: ARCHITECTURE ============ -->
+  <section class="slide" data-slide="4">
+    <span class="slide-num">04 / 08</span>
+    <span class="slide-tag">Architecture</span>
+
+    <h2 class="kicker">No backend. <span class="marker">No middleman.</span></h2>
+    <p class="lede">Every component lives at the edge or on a public chain. The trust surface is the smallest it can possibly be.</p>
+
+    <div class="arch">
+      <div class="node client">
+        <div class="icon">RN</div>
+        <h3>RN Client</h3>
+        <p>React Native app. Captures evidence, signs locally with secp256k1.</p>
+      </div>
+      <div class="arch-arrow">
+        <svg viewBox="0 0 44 24" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round">
+          <path d="M2 12 H38" />
+          <path d="M30 6 L38 12 L30 18" />
+        </svg>
+      </div>
+      <div class="node llm">
+        <div class="icon">AI</div>
+        <h3>On-device LLM</h3>
+        <p>Llama 3.2 1B via llama.rn. Summarizes evidence offline.</p>
+      </div>
+      <div class="arch-arrow">
+        <svg viewBox="0 0 44 24" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round">
+          <path d="M2 12 H38" />
+          <path d="M30 6 L38 12 L30 18" />
+        </svg>
+      </div>
+      <div class="node hash">
+        <div class="icon">#</div>
+        <h3>SHA-256</h3>
+        <p>Deterministic hash of summary, time, and signer pubkey.</p>
+      </div>
+      <div class="arch-arrow">
+        <svg viewBox="0 0 44 24" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round">
+          <path d="M2 12 H38" />
+          <path d="M30 6 L38 12 L30 18" />
+        </svg>
+      </div>
+      <div class="node chain">
+        <div class="icon">⬢</div>
+        <h3>Polygon Amoy</h3>
+        <p>Cheap L2 anchor. ~$0.0001 per proof. Public, immutable.</p>
+      </div>
+    </div>
+
+    <p class="arch-caption">— evidence stays on device. only the hash ever leaves. —</p>
+  </section>
+
+  <!-- ============ SLIDE 5: WHY IT WORKS ============ -->
+  <section class="slide" data-slide="5">
+    <span class="slide-num">05 / 08</span>
+    <span class="slide-tag">Why it works</span>
+
+    <h2 class="kicker">Three properties. <span class="marker">No tradeoffs.</span></h2>
+    <p class="lede">The architecture isn't clever — it's the minimum needed. Each property is necessary; together they're sufficient.</p>
+
+    <div class="why-grid">
+      <div class="why-card offline">
+        <span class="badge">offline-first</span>
+        <h3>Privacy by construction</h3>
+        <p>Evidence never leaves the phone. The LLM, the hashing, and the signing all run locally. Even if our servers were seized, there'd be nothing to take.</p>
+      </div>
+      <div class="why-card crypto">
+        <span class="badge">cryptographic</span>
+        <h3>Tamper-evident</h3>
+        <p>SHA-256 + secp256k1 signatures mean any change to the evidence breaks the proof. No rewriting history. No "trust me" — trust the math.</p>
+      </div>
+      <div class="why-card chain">
+        <span class="badge">blockchain-anchored</span>
+        <h3>Permanent timestamping</h3>
+        <p>Polygon Amoy gives us a public, ordered record. "I did this work before X happened" becomes a fact anyone can verify, decades later.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SLIDE 6: TECH STACK ============ -->
+  <section class="slide" data-slide="6">
+    <span class="slide-num">06 / 08</span>
+    <span class="slide-tag">Stack</span>
+
+    <h2 class="kicker">Built with <span class="marker">boring, reliable</span> pieces.</h2>
+    <p class="lede">No exotic dependencies. Everything in this list has a healthy ecosystem and at least one production deployment we trust.</p>
+
+    <div class="chip-cloud">
+      <span class="chip">React Native 0.76</span>
+      <span class="chip">Expo SDK 52</span>
+      <span class="chip">TypeScript</span>
+      <span class="chip alt">llama.rn</span>
+      <span class="chip alt">Llama 3.2 1B</span>
+      <span class="chip alt">on-device inference</span>
+      <span class="chip alt2">SHA-256</span>
+      <span class="chip alt2">secp256k1</span>
+      <span class="chip alt2">noble-curves</span>
+      <span class="chip">ethers.js</span>
+      <span class="chip">Polygon Amoy</span>
+      <span class="chip">Solidity 0.8.24</span>
+      <span class="chip alt">SQLite</span>
+      <span class="chip alt">Tamagui UI</span>
+      <span class="chip alt2">EAS Build</span>
+      <span class="chip">Hardhat</span>
+      <span class="chip">Vitest</span>
+      <span class="chip">GitHub Actions</span>
+    </div>
+  </section>
+
+  <!-- ============ SLIDE 7: TEAM ============ -->
+  <section class="slide" data-slide="7">
+    <span class="slide-num">07 / 08</span>
+    <span class="slide-tag">Team</span>
+
+    <h2 class="kicker">Four people. <span class="marker">One weekend.</span></h2>
+    <p class="lede">Cross-disciplinary by design — mobile, ML, smart contracts, and design — so the demo could ship end-to-end without handoffs.</p>
+
+    <div class="team-grid">
+      <div class="member">
+        <div class="avatar a1">AK</div>
+        <div class="member-name">Aria Kim</div>
+        <div class="member-role">Mobile · React Native</div>
+      </div>
+      <div class="member">
+        <div class="avatar a2">JR</div>
+        <div class="member-name">Jules Rivera</div>
+        <div class="member-role">ML · On-device LLM</div>
+      </div>
+      <div class="member">
+        <div class="avatar a3">SO</div>
+        <div class="member-name">Sam Okafor</div>
+        <div class="member-role">Smart contracts · Solidity</div>
+      </div>
+      <div class="member">
+        <div class="avatar a4">MT</div>
+        <div class="member-name">Mira Tan</div>
+        <div class="member-role">Design · Brand</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ SLIDE 8: ASK ============ -->
+  <section class="slide ask-slide" data-slide="8">
+    <span class="slide-num">08 / 08</span>
+    <span class="slide-tag">Ask</span>
+
+    <h2 class="ask-headline">
+      Trust, <span class="marker">verified</span>.<br/>
+      Not <em>watched</em>.
+    </h2>
+
+    <div class="ask-meta">
+      <span class="ask-pill y">Hackathon track: Social Impact</span>
+      <span class="ask-pill b">Built in 24h</span>
+      <span class="ask-pill m">Open source</span>
+    </div>
+  </section>
+
+</div>
+
+<!-- ============ NAV ============ -->
+<button class="nav-arrow prev" id="prevBtn" aria-label="Previous slide">
+  <svg viewBox="0 0 24 24" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M15 18 L9 12 L15 6" />
+  </svg>
+</button>
+<button class="nav-arrow next" id="nextBtn" aria-label="Next slide">
+  <svg viewBox="0 0 24 24" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M9 6 L15 12 L9 18" />
+  </svg>
+</button>
+
+<div class="dots" id="dots" role="tablist" aria-label="Slide navigation"></div>
+
+<script>
+(function () {
+  'use strict';
+
+  // ---------- Paper-plane flock (slide 1) ----------
+  function initFlock() {
+    const flock = document.getElementById('flock');
+    if (!flock) return;
+    const planeSVG = `
+      <svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <path d="M2 16 L30 4 L22 30 L16 18 Z" fill="#7DA1FF" stroke="#001A33" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M16 18 L22 30 L18 20 Z" fill="#001A33"/>
+        <path d="M2 16 L16 18 L30 4" fill="none" stroke="#001A33" stroke-width="1.2" stroke-linejoin="round"/>
+      </svg>`;
+    const planes = 9;
+    for (let i = 0; i < planes; i++) {
+      const p = document.createElement('div');
+      p.className = 'plane';
+      p.innerHTML = planeSVG;
+      const top = 8 + Math.random() * 80;
+      const dur = 9 + Math.random() * 7;
+      const delay = -Math.random() * dur;
+      const scale = .55 + Math.random() * .9;
+      p.style.top = top + '%';
+      p.style.left = '0';
+      p.style.animationDuration = dur + 's';
+      p.style.animationDelay = delay + 's';
+      p.style.transform = `scale(${scale})`;
+      // Re-tint a few planes for variety
+      if (i % 3 === 0) p.querySelector('path').setAttribute('fill', '#FFD84D');
+      if (i % 4 === 0) p.querySelector('path').setAttribute('fill', '#CAD9F6');
+      flock.appendChild(p);
+    }
+  }
+  initFlock();
+
+  // ---------- Deck nav ----------
+  const slides = Array.from(document.querySelectorAll('.slide'));
+  const total = slides.length;
+  let current = 0;
+
+  // Build dots
+  const dotsWrap = document.getElementById('dots');
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement('button');
+    d.className = 'dot' + (i === 0 ? ' active' : '');
+    d.setAttribute('role', 'tab');
+    d.setAttribute('aria-label', 'Go to slide ' + (i + 1));
+    d.addEventListener('click', () => go(i));
+    dotsWrap.appendChild(d);
+  }
+  const dots = Array.from(dotsWrap.children);
+
+  function go(idx) {
+    if (idx < 0 || idx >= total || idx === current) return;
+    const dir = idx > current ? 1 : -1;
+    slides[current].classList.remove('active');
+    slides[current].classList.toggle('prev', dir === 1);
+    dots[current].classList.remove('active');
+    current = idx;
+    slides[current].classList.add('active');
+    slides[current].classList.remove('prev');
+    dots[current].classList.add('active');
+  }
+  function next() { go(Math.min(current + 1, total - 1)); }
+  function prev() { go(Math.max(current - 1, 0)); }
+
+  document.getElementById('nextBtn').addEventListener('click', next);
+  document.getElementById('prevBtn').addEventListener('click', prev);
+
+  // Keyboard
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'PageDown' || e.key === ' ') {
+      e.preventDefault(); next();
+    } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+      e.preventDefault(); prev();
+    } else if (e.key === 'Home') {
+      go(0);
+    } else if (e.key === 'End') {
+      go(total - 1);
+    }
+  });
+
+  // Touch swipe
+  let touchStartX = null;
+  let touchStartY = null;
+  document.addEventListener('touchstart', (e) => {
+    if (e.touches.length !== 1) return;
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (touchStartX == null) return;
+    const t = e.changedTouches[0];
+    const dx = t.clientX - touchStartX;
+    const dy = t.clientY - touchStartY;
+    if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) {
+      if (dx < 0) next(); else prev();
+    }
+    touchStartX = touchStartY = null;
+  }, { passive: true });
+})();
+</script>
+</body>
+</html>
