@@ -1,0 +1,8 @@
+node_modules/
+.expo/
+dist/
+.DS_Store
+*.log
+docs/_build/
+app/.expo/
+contracts/node_modules/
