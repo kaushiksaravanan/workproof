@@ -1,0 +1,3 @@
+# WorkProofAnchor contract
+
+`WorkProofAnchor.sol` is a minimal anchor contract — it accepts a `bytes32` hash and emits an `Anchored(hash, worker, timestamp)` event so a work-proof record can be cheaply pinned to Polygon Amoy. Compile it with **solc 0.8.24** using either Foundry (`forge build` after dropping the file under `src/`) or Hardhat (`npx hardhat compile` with `solidity: "0.8.24"` in `hardhat.config.ts`); both produce an ABI and creation bytecode. Paste those into the `ABI` and `BYTECODE` constants in `deploy.ts`, fund an EOA on Polygon Amoy (faucet: <https://faucet.polygon.technology>), then run `PRIVATE_KEY=0x... npx ts-node contracts/deploy.ts` — the script prints the deployed address, which you set as `EXPO_PUBLIC_ANCHOR_ADDRESS` for the mobile app.

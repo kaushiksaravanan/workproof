@@ -11,6 +11,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
+import { useHaptics } from '../theme/useHaptics';
 import { useReducedMotion } from '../theme/useReducedMotion';
 
 /**
@@ -55,6 +56,7 @@ export function SegmentedTabs({
 }: SegmentedTabsProps): React.ReactElement {
   const theme = useTheme();
   const reduceMotion = useReducedMotion();
+  const haptics = useHaptics();
   const tabCount = Math.max(1, tabs.length);
   const activeIndex = Math.max(
     0,
@@ -67,11 +69,16 @@ export function SegmentedTabs({
   const animated = useRef<Animated.Value>(
     new Animated.Value(activeIndex),
   ).current;
+  // Ref-based handle so each tween is interruptible: the previous animation
+  // is .stop()'d before a new one starts, and unmount cleans up in flight.
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
   const [containerWidth, setContainerWidth] = useState<number>(0);
 
   useEffect(() => {
+    animationRef.current?.stop();
     if (reduceMotion) {
       animated.setValue(activeIndex);
+      animationRef.current = null;
       return;
     }
     const anim = Animated.timing(animated, {
@@ -80,8 +87,9 @@ export function SegmentedTabs({
       easing: EASE_BEZIER,
       useNativeDriver: true,
     });
+    animationRef.current = anim;
     anim.start();
-    return () => anim.stop();
+    return () => animationRef.current?.stop();
   }, [activeIndex, animated, reduceMotion, theme.motion.hoverLiftMs]);
 
   const styles = useMemo(
@@ -137,11 +145,19 @@ export function SegmentedTabs({
     if (next !== containerWidth) setContainerWidth(next);
   };
 
+  // iOS UISegmentedControl announces the active segment at the group
+  // level (e.g. "Pending, segmented control, 2 of 3"). Surface the active
+  // tab's label via accessibilityValue so screen readers get parity.
+  const activeLabel =
+    tabs[activeIndex]?.accessibilityLabel ?? tabs[activeIndex]?.label;
+
   return (
     <View
       onLayout={onLayout}
       style={[styles.container, style]}
+      accessible
       accessibilityRole={accessibilityRole}
+      accessibilityValue={activeLabel ? { text: activeLabel } : undefined}
     >
       {innerWidth > 0 ? (
         <Animated.View
@@ -157,7 +173,14 @@ export function SegmentedTabs({
         return (
           <Pressable
             key={tab.key}
-            onPress={() => onChange(tab.key)}
+            onPress={() => {
+              // Gate the selection haptic on an actual change so re-tapping
+              // the active tab stays silent — matches UISegmentedControl.
+              if (tab.key !== value) {
+                haptics.selection();
+                onChange(tab.key);
+              }
+            }}
             android_ripple={{
               color: theme.colors.peggyRipple,
               borderless: false,
@@ -165,6 +188,9 @@ export function SegmentedTabs({
             accessibilityRole="tab"
             accessibilityLabel={tab.accessibilityLabel ?? tab.label}
             accessibilityState={{ selected: isActive }}
+            // Vertical-only hitSlop — horizontal slop would overlap
+            // neighbouring tabs in 4-tab narrow layouts.
+            hitSlop={{ top: 4, bottom: 4, left: 0, right: 0 }}
             style={styles.tab}
           >
             <Text style={isActive ? styles.labelActive : styles.labelInactive}>

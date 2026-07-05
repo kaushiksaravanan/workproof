@@ -4,12 +4,23 @@ import { StatusBar } from 'expo-status-bar';
 import {
   AccessibilityInfo,
   ActivityIndicator,
+  AppState,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useAppFonts, colors, defaultTheme } from './src/theme';
-import { TranscriptScreen } from './src/screens/TranscriptScreen';
+import type { RootStackParamList } from './src/navigation/types';
+import { Onboarding } from './src/screens/Onboarding';
+import { Home } from './src/screens/Home';
+import { LogWork } from './src/screens/LogWork';
+import { ProofDetail } from './src/screens/ProofDetail';
+import { History } from './src/screens/History';
+import { flushQueue } from './src/services/anchor';
+import { useWorkStore } from './src/state/workStore';
 
 /**
  * App — root entry. Loads the full Peggy type stack via useAppFonts (the
@@ -22,6 +33,32 @@ import { TranscriptScreen } from './src/screens/TranscriptScreen';
  * which evaluates this file before anything else in src/.
  */
 
+const Stack = createNativeStackNavigator<RootStackParamList>();
+
+function OnboardingScreen({
+  navigation,
+}: {
+  navigation: {
+    replace: (route: keyof RootStackParamList) => void;
+  };
+}): React.ReactElement {
+  return <Onboarding onComplete={() => navigation.replace('Home')} />;
+}
+
+function HistoryScreen({
+  navigation,
+}: {
+  navigation: {
+    navigate: (route: 'ProofDetail', params: { id: string }) => void;
+  };
+}): React.ReactElement {
+  return (
+    <History
+      onOpenProof={(record) => navigation.navigate('ProofDetail', { id: record.id })}
+    />
+  );
+}
+
 export default function App(): React.ReactElement {
   const { loaded, error } = useAppFonts();
 
@@ -29,6 +66,64 @@ export default function App(): React.ReactElement {
     if (!loaded) {
       AccessibilityInfo.announceForAccessibility('Loading WorkProof');
     }
+  }, [loaded]);
+
+  // After fonts hydrate, hydrate the work store and try to drain any queued
+  // anchor hashes (e.g. records anchored while offline). Re-attempt drain
+  // each time the app returns to foreground — a cheap proxy for "network
+  // probably reachable" without depending on @react-native-community/netinfo.
+  useEffect(() => {
+    if (!loaded) return;
+
+    let cancelled = false;
+
+    const drainQueueAndReconcile = async (): Promise<void> => {
+      try {
+        const results = await flushQueue();
+        if (cancelled || results.length === 0) return;
+        const records = useWorkStore.getState().records;
+        const setAnchored = useWorkStore.getState().setAnchored;
+        for (const { hashHex, result } of results) {
+          // A record is queued if its anchorTxHash is `queued:<hashHex>`.
+          // Match by hash (record.hash) for resilience.
+          const queuedRecords = records.filter(
+            (r) =>
+              r.hash === hashHex && r.anchorTxHash === `queued:${hashHex}`,
+          );
+          for (const r of queuedRecords) {
+            try {
+              await setAnchored(r.id, result.txHash, result.chainId);
+            } catch {
+              // ignore individual reconcile failures
+            }
+          }
+        }
+      } catch {
+        // Drain failures are non-fatal; we'll retry next foreground.
+      }
+    };
+
+    // Initial hydrate + drain.
+    void (async () => {
+      try {
+        await useWorkStore.getState().refresh();
+      } catch {
+        // refresh() already swallows errors into store state
+      }
+      if (cancelled) return;
+      await drainQueueAndReconcile();
+    })();
+
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') {
+        void drainQueueAndReconcile();
+      }
+    });
+
+    return () => {
+      cancelled = true;
+      sub.remove();
+    };
   }, [loaded]);
 
   if (!loaded) {
@@ -50,10 +145,32 @@ export default function App(): React.ReactElement {
   }
 
   return (
-    <ThemeProvider>
-      <TranscriptScreen />
-      <StatusBar style="dark" />
-    </ThemeProvider>
+    <SafeAreaProvider>
+      <ThemeProvider>
+        <NavigationContainer>
+          <Stack.Navigator
+            initialRouteName="Onboarding"
+            screenOptions={{ headerShown: false }}
+          >
+            <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+            <Stack.Screen name="Home" component={Home} />
+            <Stack.Screen
+              name="LogWork"
+              component={LogWork}
+              options={{
+                presentation: 'formSheet',
+                sheetGrabberVisible: true,
+                sheetAllowedDetents: [0.9, 1.0],
+                gestureEnabled: true,
+              }}
+            />
+            <Stack.Screen name="ProofDetail" component={ProofDetail} />
+            <Stack.Screen name="History" component={HistoryScreen} />
+          </Stack.Navigator>
+          <StatusBar style="dark" />
+        </NavigationContainer>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 

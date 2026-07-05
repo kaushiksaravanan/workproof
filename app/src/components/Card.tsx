@@ -1,6 +1,7 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AccessibilityRole,
+  Animated,
   LayoutChangeEvent,
   Pressable,
   PressableStateCallbackType,
@@ -10,6 +11,8 @@ import {
 } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
 import { Surface, SurfaceProvider } from '../theme/SurfaceContext';
+import { useReducedMotion } from '../theme/useReducedMotion';
+import { useHaptics } from '../theme/useHaptics';
 
 /**
  * Card — surface variants per peggy-component-spec.md §Cards.
@@ -63,7 +66,49 @@ export function Card({
   accessibilityRole,
 }: CardProps): React.ReactElement {
   const theme = useTheme();
+  const reduceMotion = useReducedMotion();
+  const haptics = useHaptics();
   const [notebookHeight, setNotebookHeight] = useState<number>(0);
+
+  // Animated press lift — mirrors Button.tsx. Rests at 0 and dips to
+  // theme.motion.pressLiftDp on press-in (the lift idiom shared with
+  // Button / RoundRecordButton). Reduced-motion users skip the animation
+  // and stay at 0 so they never see the translate.
+  const lift = useRef(new Animated.Value(0)).current;
+  const animationRef = useRef<Animated.CompositeAnimation | null>(null);
+
+  const animateTo = (toValue: number): void => {
+    if (reduceMotion) {
+      lift.setValue(0);
+      return;
+    }
+    animationRef.current?.stop();
+    const next = Animated.timing(lift, {
+      toValue,
+      duration: theme.motion.pressSettleMs,
+      useNativeDriver: true,
+    });
+    animationRef.current = next;
+    next.start(({ finished }) => {
+      if (finished && animationRef.current === next) {
+        animationRef.current = null;
+      }
+    });
+  };
+
+  useEffect(() => {
+    return () => {
+      animationRef.current?.stop();
+    };
+  }, []);
+
+  if (__DEV__ && onPress && !accessibilityLabel) {
+    // VoiceOver announces interactive cards by their accessibilityLabel; an
+    // unlabelled pressable Card surfaces as an unnamed button. Warn early so
+    // the omission is caught in dev rather than QA.
+    // eslint-disable-next-line no-console
+    console.warn('Card with onPress requires accessibilityLabel');
+  }
 
   const styles = useMemo(
     () =>
@@ -115,7 +160,7 @@ export function Card({
           minHeight: theme.tapTargets.min,
           minWidth: theme.tapTargets.min,
         },
-        pressed: { opacity: 0.92, transform: [{ translateY: 1 }] },
+        pressed: { opacity: theme.motion.pressOpacity },
         pressedShadow: { ...theme.shadows.soft },
       }),
     [theme],
@@ -174,18 +219,29 @@ export function Card({
       return out;
     };
 
+    const handlePress = (): void => {
+      // Light impact mirrors Button — confirms the tap registered without
+      // the heavier feel of a destructive or primary action.
+      haptics.impactLight();
+      onPress();
+    };
+
     return (
-      <Pressable
-        onPress={onPress}
-        onLayout={variant === 'notebook' ? onNotebookLayout : undefined}
-        android_ripple={{ color: theme.colors.peggyRipple, borderless: false }}
-        accessibilityRole={accessibilityRole ?? 'button'}
-        accessibilityLabel={accessibilityLabel}
-        accessibilityHint={accessibilityHint}
-        style={pressableStyle}
-      >
-        {wrappedChildren}
-      </Pressable>
+      <Animated.View style={{ transform: [{ translateY: lift }] }}>
+        <Pressable
+          onPress={handlePress}
+          onPressIn={() => animateTo(theme.motion.pressLiftDp)}
+          onPressOut={() => animateTo(0)}
+          onLayout={variant === 'notebook' ? onNotebookLayout : undefined}
+          android_ripple={{ color: theme.colors.peggyRipple, borderless: false }}
+          accessibilityRole={accessibilityRole ?? 'button'}
+          accessibilityLabel={accessibilityLabel}
+          accessibilityHint={accessibilityHint}
+          style={pressableStyle}
+        >
+          {wrappedChildren}
+        </Pressable>
+      </Animated.View>
     );
   }
 

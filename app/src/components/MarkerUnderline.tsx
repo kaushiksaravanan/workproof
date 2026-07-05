@@ -13,6 +13,9 @@ import { useTheme } from '../theme/ThemeProvider';
  * The yellow rect is decorative (silenced for assistive tech); the text is
  * exposed via the standard <Text> child. RN already reads the text node, so
  * we only override accessibilityLabel when explicitly provided.
+ *
+ * Geometry derives from style.lineHeight; pass a numeric lineHeight for
+ * Dynamic Type tracking.
  */
 
 export interface MarkerUnderlineProps {

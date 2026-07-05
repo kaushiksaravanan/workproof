@@ -20,5 +20,6 @@ export { useAppFonts } from './fonts';
 export { ThemeProvider, useTheme, defaultTheme } from './ThemeProvider';
 export type { Theme, ThemeProviderProps } from './ThemeProvider';
 export { useReducedMotion } from './useReducedMotion';
+export { useHaptics } from './useHaptics';
 export { SurfaceProvider, useSurface } from './SurfaceContext';
 export type { Surface } from './SurfaceContext';

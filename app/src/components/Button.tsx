@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import {
   AccessibilityRole,
+  AccessibilityState,
   Animated,
+  Easing,
   Pressable,
   PressableStateCallbackType,
   StyleSheet,
@@ -9,6 +11,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
+import { useHaptics } from '../theme/useHaptics';
 import { useReducedMotion } from '../theme/useReducedMotion';
 
 /**
@@ -30,25 +33,32 @@ export interface ButtonProps {
   onPress: () => void;
   variant?: ButtonVariant;
   disabled?: boolean;
+  busy?: boolean;
   style?: ViewStyle;
   accessibilityLabel?: string;
   accessibilityHint?: string;
   accessibilityRole?: AccessibilityRole;
+  accessibilityState?: AccessibilityState;
 }
 
 const REST_LIFT = -2;
+// Mirror SegmentedTabs' EASE_BEZIER so press settle rides a HIG curve.
+const EASE = Easing.bezier(0.25, 0.1, 0.25, 1);
 
 export function Button({
   label,
   onPress,
   variant = 'primary',
   disabled = false,
+  busy,
   style,
   accessibilityLabel,
   accessibilityHint,
   accessibilityRole = 'button',
+  accessibilityState,
 }: ButtonProps): React.ReactElement {
   const theme = useTheme();
+  const haptics = useHaptics();
   const reduceMotion = useReducedMotion();
   const restLift = reduceMotion ? 0 : REST_LIFT;
   const lift = useRef(new Animated.Value(restLift)).current;
@@ -70,6 +80,7 @@ export function Button({
     const next = Animated.timing(lift, {
       toValue,
       duration: theme.motion.pressSettleMs,
+      easing: EASE,
       useNativeDriver: true,
     });
     animationRef.current = next;
@@ -87,6 +98,22 @@ export function Button({
   }, []);
 
   const isPill = variant === 'pillAmber' || variant === 'pillCoral';
+
+  // Haptic on press: pillCoral (destructive) gets medium impact, all other
+  // variants get light. useHaptics() no-ops on non-iOS so this is safe.
+  // busy is treated as a soft-disable: taps no-op and haptics stay silent so
+  // a tap mid-submit doesn't double-fire onPress or buzz the user.
+  const handlePress = (): void => {
+    if (disabled || busy) return;
+    if (variant === 'pillCoral' || variant === 'pillAmber') {
+      haptics.impactMedium();
+    } else if (variant === 'secondary') {
+      haptics.selection();
+    } else {
+      haptics.impactLight();
+    }
+    onPress();
+  };
 
   const styles = useMemo(
     () =>
@@ -130,7 +157,7 @@ export function Button({
       state.pressed ? styles.pressedShadow : styles.rest,
       variantStyle,
     ];
-    if (disabled) out.push(styles.disabled);
+    if (disabled || busy) out.push(styles.disabled);
     if (state.pressed) out.push(styles.pressed);
     return out;
   };
@@ -138,15 +165,16 @@ export function Button({
   return (
     <Animated.View style={[animatedStyle, style]}>
       <Pressable
-        onPress={onPress}
-        disabled={disabled}
+        onPress={handlePress}
+        disabled={disabled || busy}
         onPressIn={() => animateTo(0)}
         onPressOut={() => animateTo(restLift)}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
         android_ripple={{ color: theme.colors.peggyRipple, borderless: false }}
         accessibilityRole={accessibilityRole}
         accessibilityLabel={accessibilityLabel ?? label}
         accessibilityHint={accessibilityHint}
-        accessibilityState={{ disabled }}
+        accessibilityState={{ disabled, busy, ...accessibilityState }}
         style={pressableStyle}
       >
         <Text

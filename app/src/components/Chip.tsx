@@ -10,6 +10,7 @@ import {
   ViewStyle,
 } from 'react-native';
 import { useTheme } from '../theme/ThemeProvider';
+import { useHaptics } from '../theme/useHaptics';
 
 /**
  * Chip — pill tag in one of the four Peggy variants.
@@ -39,7 +40,7 @@ export interface ChipProps {
   accessibilityRole?: AccessibilityRole;
 }
 
-const CHIP_HITSLOP = { top: 10, bottom: 10, left: 6, right: 6 } as const;
+const CHIP_HITSLOP = { top: 10, bottom: 10, left: 8, right: 8 } as const;
 
 export function Chip({
   label,
@@ -52,6 +53,7 @@ export function Chip({
   accessibilityRole,
 }: ChipProps): React.ReactElement {
   const theme = useTheme();
+  const haptics = useHaptics();
 
   const styles = useMemo(
     () =>
@@ -98,9 +100,21 @@ export function Chip({
       return out;
     };
 
+    // Per Apple HIG: toggles/tags use a selection haptic when their state
+    // flips; pure buttons get a light impact. `selected !== undefined`
+    // distinguishes filter-pill (toggle) usage from one-shot button usage.
+    const handlePress = () => {
+      if (selected !== undefined) {
+        haptics.selection();
+      } else {
+        haptics.impactLight();
+      }
+      onPress();
+    };
+
     return (
       <Pressable
-        onPress={onPress}
+        onPress={handlePress}
         hitSlop={CHIP_HITSLOP}
         android_ripple={{ color: theme.colors.peggyRipple, borderless: false }}
         accessibilityRole={resolvedRole}

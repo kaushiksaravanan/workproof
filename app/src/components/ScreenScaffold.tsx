@@ -1,7 +1,13 @@
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, View, ViewStyle } from 'react-native';
+import {
+  RefreshControlProps,
+  ScrollView,
+  StyleSheet,
+  View,
+  ViewStyle,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { StatusBar } from 'expo-status-bar';
+import type { Edge } from 'react-native-safe-area-context';
 import { useTheme } from '../theme/ThemeProvider';
 
 /**
@@ -24,6 +30,12 @@ export interface ScreenScaffoldProps {
   scrollable?: boolean;
   contentStyle?: ViewStyle;
   testID?: string;
+  /** Pull-to-refresh control forwarded to the ScrollView. */
+  refreshControl?: React.ReactElement<RefreshControlProps>;
+  /** Show the vertical scroll indicator. Default true; hero/cover screens can opt out. */
+  showsVerticalScrollIndicator?: boolean;
+  /** Safe-area edges. Modals can pass ['bottom','left','right'] to skip the top inset. */
+  edges?: ReadonlyArray<Edge>;
 }
 
 export function ScreenScaffold({
@@ -32,6 +44,9 @@ export function ScreenScaffold({
   scrollable = true,
   contentStyle,
   testID,
+  refreshControl,
+  showsVerticalScrollIndicator = true,
+  edges,
 }: ScreenScaffoldProps): React.ReactElement {
   const theme = useTheme();
 
@@ -56,15 +71,16 @@ export function ScreenScaffold({
   );
 
   return (
-    <SafeAreaView style={styles.safe} testID={testID}>
-      <StatusBar style="dark" />
+    <SafeAreaView style={styles.safe} testID={testID} edges={edges}>
       {hero ? <View style={styles.heroSlot}>{hero}</View> : null}
       {scrollable ? (
         <ScrollView
           contentContainerStyle={[styles.content, contentStyle]}
           keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
+          showsVerticalScrollIndicator={showsVerticalScrollIndicator}
+          alwaysBounceVertical
           contentInsetAdjustmentBehavior="automatic"
+          refreshControl={refreshControl}
         >
           {children}
         </ScrollView>

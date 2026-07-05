@@ -10,5 +10,10 @@ npm-debug.*
 *.orig.*
 web-build/
 
+# Env files — real secrets live here, only .env.example is committed.
+.env
+.env.local
+.env.*.local
+
 # macOS
 .DS_Store

@@ -13,6 +13,7 @@ export const colors = {
   peggyYellow: '#FFD84D',
   peggyCoral: '#F0445B',
   peggyMint: '#C9EFC3',
+  /** peggyAmber: requires ink text at >=14sp Bold for WCAG AA Large (3.89:1). Do not lower font size or weight on amber surfaces. */
   peggyAmber: '#BD814B',
 
   // Neutrals
@@ -105,9 +106,11 @@ export const motion = {
   pressSettleMs: 80,
   markerDrawMs: 250,
   cardEnterMs: 200,
-  planeSwooshMs: 400,
+  planeSwooshMs: 350,
   hoverLiftDp: -2,
   cardLiftDp: -4,
+  pressOpacity: 0.85,
+  pressLiftDp: -2,
 } as const;
 
 export const opacities = {
