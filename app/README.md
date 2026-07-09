@@ -53,16 +53,61 @@ If you accidentally tap "Deny", clear permissions in **Settings → Apps → Exp
 
 The mobile app does not require any environment variables to run the demo. Everything is on-device.
 
-If you want to point the optional verifier / anchoring step at a custom backend, create `app/.env` with:
+For LLM-backed field extraction (`services/llm.ts`), the app can vend Gemini keys from CipherStack. Copy `.env.example` to `.env` and fill in:
 
 ```bash
-# Optional. Defaults shown.
-EXPO_PUBLIC_VERIFIER_URL=https://verify.workproof.local
-EXPO_PUBLIC_CHAIN_RPC_URL=
-EXPO_PUBLIC_CONTRACT_ADDRESS=
+EXPO_PUBLIC_CIPHERSTACK_TOKEN=csk_your_service_token_here
+EXPO_PUBLIC_HACKATHON_KEY=0xabcdef...           # any hex private key for signing
+EXPO_PUBLIC_ANCHOR_ADDRESS=0x0000...            # Polygon Amoy anchor contract
 ```
 
 `EXPO_PUBLIC_*` is the only prefix Expo exposes to the client at build time. Anything without that prefix is invisible to the running app — that's intentional.
+
+**Native-bundle caveat.** `EXPO_PUBLIC_*` values are inlined into the shipped bundle and are extractable from the APK. For production, put long-lived secrets behind a server-side proxy (see the Vercel section below for the pattern).
+
+## Deploying the web build to Vercel
+
+The Expo web export renders in a browser (Home / History / ProofDetail / Onboarding). Camera / mic / file-system paths are no-ops on web, so LogWork mounts but the record button does nothing.
+
+### One-time setup
+
+```bash
+cd app
+npx expo install react-native-web react-dom @expo/metro-runtime
+```
+
+`vercel.json` is committed and points at `npx expo export --platform web` with output in `dist/`.
+
+### Deploy
+
+From the repo root (not `app/` — the project's `rootDirectory` is set to `app` on Vercel):
+
+```bash
+vercel deploy --prod --scope <your-team>
+```
+
+Set the following env vars on the Vercel project. **Do not use the `EXPO_PUBLIC_` prefix for secrets** — those get inlined into the browser bundle.
+
+| Var | Scope | Purpose |
+| --- | --- | --- |
+| `CIPHERSTACK_TOKEN` | server-only (production/preview/development) | Read by `/api/vend` to forward vend calls without leaking the token to the client. |
+
+### The `/api/vend` proxy
+
+`app/api/vend.ts` is a Vercel serverless function that:
+
+- Reads `process.env.CIPHERSTACK_TOKEN` server-side (never inlined into the bundle).
+- Accepts `GET /api/vend?group=<slug>`.
+- Allow-lists 10 CipherStack groups: `gemini`, `openrouter`, `huggingface`, `mistral`, `groq`, `nvidia`, `cerebras`, `cohere`, `github-models`, `cloudflare-ai`.
+- Forwards to `https://cipherstack.kaushik.cv/api/v1/vend/<group>` with the bearer token and passes the response through.
+
+On web, `vendGeminiKey()` calls `/api/vend?group=gemini` (same-origin, no Authorization header). On native, it hits CipherStack directly using the bundled `EXPO_PUBLIC_CIPHERSTACK_TOKEN` (accepted APK-extractable exposure).
+
+Tested at `api/__tests__/vend.test.ts` — 10 cases covering missing group, invalid group, missing env var, bearer-header forwarding, upstream status pass-through, non-JSON upstream, and network failure.
+
+### Expo Go SDK compatibility
+
+If you also want to preview the app in Expo Go on a phone, the installed Expo Go version must match the app's Expo SDK. Currently SDK 54. If Expo Go shows "incompatible SDK version", update it from the Play Store.
 
 ## Demo path (90 seconds)
 
