@@ -521,6 +521,46 @@ describe('ProofDetail', () => {
       expect(sound.pauseAsync).not.toHaveBeenCalled();
     });
 
+    it('pressing Pause while playing calls sound.pauseAsync and announces "Audio paused"', async () => {
+      const announceSpy = jest.spyOn(
+        require('react-native').AccessibilityInfo,
+        'announceForAccessibility',
+      );
+      const { getByLabelText } = renderProofDetail('rec-queued');
+      await waitFor(() => {
+        expect(Audio.Sound.createAsync).toHaveBeenCalled();
+      });
+      await new Promise((r) => setTimeout(r, 0));
+      const sound = (Audio.Sound as unknown as { _instances: any[] })
+        ._instances[0];
+      expect(sound).toBeDefined();
+      // getStatusAsync returns isPlaying=true → onToggle takes pause branch.
+      sound.getStatusAsync.mockResolvedValue({
+        isLoaded: true,
+        isPlaying: true,
+        didJustFinish: false,
+        durationMillis: 1000,
+        positionMillis: 500,
+      });
+      // Emit an isPlaying=true status so the button label flips to 'Pause audio'.
+      act(() => {
+        (Audio.Sound as unknown as { _emitStatus: (s: any) => void })._emitStatus({
+          isLoaded: true,
+          isPlaying: true,
+          didJustFinish: false,
+          durationMillis: 1000,
+          positionMillis: 500,
+        });
+      });
+      const pauseButton = getByLabelText('Pause audio');
+      fireEvent.press(pauseButton);
+      await waitFor(() => {
+        expect(sound.pauseAsync).toHaveBeenCalledTimes(1);
+      });
+      expect(announceSpy).toHaveBeenCalledWith('Audio paused');
+      announceSpy.mockRestore();
+    });
+
     it('sound.getStatusAsync throwing is swallowed silently', async () => {
       const { getByLabelText } = renderProofDetail('rec-queued');
       await waitFor(() => {
