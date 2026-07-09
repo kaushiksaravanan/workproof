@@ -696,12 +696,12 @@
       <div class="why-card offline">
         <span class="badge">offline-first</span>
         <h3>Privacy by construction</h3>
-        <p>Evidence never leaves the phone. The LLM, the hashing, and the signing all run locally. Even if our servers were seized, there'd be nothing to take.</p>
+        <p>Raw evidence — photo bytes, audio bytes — never leaves the phone. Only the SHA-256 hash goes on-chain. Optional Gemini extraction sees the typed transcript, not the media.</p>
       </div>
       <div class="why-card crypto">
         <span class="badge">cryptographic</span>
         <h3>Tamper-evident</h3>
-        <p>SHA-256 + secp256k1 signatures mean any change to the evidence breaks the proof. No rewriting history. No "trust me" — trust the math.</p>
+        <p>SHA-256 over the canonical bundle (fields + photo hash + audio hash) means any change to any input breaks the proof. Verification is public: recompute the hash, check it matches the anchor event on Polygon Amoy.</p>
       </div>
       <div class="why-card chain">
         <span class="badge">blockchain-anchored</span>
