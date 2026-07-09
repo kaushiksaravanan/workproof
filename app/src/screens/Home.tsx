@@ -58,6 +58,10 @@ function countAnchored(records: WorkRecord[]): number {
   return records.filter(isAnchored).length;
 }
 
+// Exported for unit testing — these are pure and don't need the screen-level
+// mocks Home.test.tsx pulls in.
+export { countThisWeek, countAnchored };
+
 export function Home({ navigation }: HomeProps): React.ReactElement {
   const theme = useTheme();
   const records = useWorkStore((s) => s.records);
