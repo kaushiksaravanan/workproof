@@ -84,6 +84,10 @@ function formatTimer(ms: number): string {
   return `${mm}:${ss}`;
 }
 
+// Exported for unit testing; also re-usable by any future screen that needs
+// mm:ss timer formatting.
+export { formatTimer };
+
 interface ReviewFields extends ExtractedFields {
   workerName: string;
 }
