@@ -8,6 +8,7 @@
  * inflated amounts.
  */
 
+import { Platform } from "react-native";
 import { CIPHERSTACK_TOKEN, CIPHERSTACK_VEND_URL } from "./config";
 import type { ExtractedFields } from "../types";
 
@@ -52,15 +53,19 @@ const EMPTY: ExtractedFields = {
 /**
  * Vend a Gemini API key from CipherStack. Returns null on any error so the
  * caller can transparently fall back to the regex baseline.
+ *
+ * Web builds route through /api/vend/gemini so the CipherStack service token
+ * stays server-side (it would otherwise be inlined into the public JS bundle).
+ * Native builds hit CipherStack directly with the bundled EXPO_PUBLIC_ token.
  */
 export async function vendGeminiKey(): Promise<VendedKey | null> {
   try {
-    const res = await fetch(CIPHERSTACK_VEND_URL, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${CIPHERSTACK_TOKEN}`,
-      },
-    });
+    const isWeb = Platform.OS === "web";
+    const url = isWeb ? "/api/vend?group=gemini" : CIPHERSTACK_VEND_URL;
+    const headers: Record<string, string> = isWeb
+      ? {}
+      : { Authorization: `Bearer ${CIPHERSTACK_TOKEN}` };
+    const res = await fetch(url, { method: "GET", headers });
     if (!res.ok) return null;
     const json = (await res.json()) as {
       key?: string;
