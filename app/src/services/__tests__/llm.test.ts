@@ -7,13 +7,15 @@
  */
 
 // Config mock — llm.ts imports CIPHERSTACK_TOKEN + CIPHERSTACK_VEND_URL.
-// We only exercise the OFFLINE path (regex baseline), so undefined token is fine.
+// Provide a defined token so the native branch of vendGeminiKey exercises
+// the Bearer-header path. The offline regex tests never touch either value.
 jest.mock('../config', () => ({
-  CIPHERSTACK_TOKEN: undefined,
+  CIPHERSTACK_TOKEN: 'csk_test_token',
   CIPHERSTACK_VEND_URL: 'https://example.local/vend/gemini',
 }));
 
-import { parseAmount, regexExtract, extractWorkFields } from '../llm';
+import { parseAmount, regexExtract, extractWorkFields, vendGeminiKey } from '../llm';
+import { Platform } from 'react-native';
 
 describe('parseAmount — string → number', () => {
   it('returns 0 for empty/whitespace', () => {
@@ -222,5 +224,78 @@ describe('extractWorkFields — default offline behavior', () => {
     );
     expect(out.workType).toBe('painting');
     expect(out.amountReceived).toBe(3000);
+  });
+});
+
+describe('vendGeminiKey — CipherStack vend flow', () => {
+  const originalFetch = global.fetch;
+  const originalOS = Platform.OS;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    Object.defineProperty(Platform, 'OS', { value: originalOS, configurable: true });
+  });
+
+  const setOS = (os: 'web' | 'ios' | 'android'): void => {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
+  };
+
+  it('web path hits /api/vend with no Authorization header', async () => {
+    setOS('web');
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ key: 'AIzaWEB', base_url: 'https://web.example/v1' }),
+    });
+    global.fetch = fetchMock as any;
+    const result = await vendGeminiKey();
+    expect(result).toEqual({ key: 'AIzaWEB', baseUrl: 'https://web.example/v1' });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/vend?group=gemini');
+    expect((init as any).headers).toEqual({});
+    expect((init as any).method).toBe('GET');
+  });
+
+  it('native path hits CipherStack URL with Bearer token', async () => {
+    setOS('ios');
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ key: 'AIzaNATIVE' }),
+    });
+    global.fetch = fetchMock as any;
+    const result = await vendGeminiKey();
+    // No base_url in response → falls back to Google's public endpoint.
+    expect(result).toEqual({
+      key: 'AIzaNATIVE',
+      baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://example.local/vend/gemini');
+    expect((init as any).headers).toEqual({
+      Authorization: 'Bearer csk_test_token',
+    });
+  });
+
+  it('returns null when the vend response is not ok', async () => {
+    setOS('web');
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      json: async () => ({ error: 'nope' }),
+    }) as any;
+    expect(await vendGeminiKey()).toBeNull();
+  });
+
+  it('returns null when the vend response has no key field', async () => {
+    setOS('web');
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({}),
+    }) as any;
+    expect(await vendGeminiKey()).toBeNull();
+  });
+
+  it('returns null when fetch throws (network / CORS / offline)', async () => {
+    setOS('web');
+    global.fetch = jest.fn().mockRejectedValue(new Error('offline')) as any;
+    expect(await vendGeminiKey()).toBeNull();
   });
 });
