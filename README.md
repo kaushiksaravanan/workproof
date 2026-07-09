@@ -14,7 +14,7 @@ Field-ready proof-of-work capture for crews and contractors. Snap a photo, recor
 
 WorkProof turns a 30-second site walkthrough into a tamper-evident record:
 
-- **Photo + voice + GPS** captured in a single flow.
+- **Photo + voice + location** captured in a single flow.
 - **On-device transcription** turns the voice memo into a written report.
 - **Cryptographic signing** (ethers.js) binds the bundle to a job key so the artifact can be re-verified later.
 - **PDF export + share sheet** so the proof leaves the device through whatever channel the crew already uses (WhatsApp, email, SMS).

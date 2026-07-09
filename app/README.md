@@ -44,7 +44,6 @@ The app requests, at runtime, the following permissions. Grant them when Android
 
 - **Camera** — capture the photo of the finished work. Configured via `expo-camera` in `app.json`.
 - **Microphone** — record the voice memo. Requested by both `expo-camera` (video mode) and `expo-av` (audio recording). Declared in `app.json` under both plugins.
-- **Location (Fine)** — stamp the bundle with where it was captured. Requested on first use.
 - **Storage / Media** (Android 12 and below) — write the exported PDF. On Android 13+ this is replaced by scoped sharing via the system share sheet, no permission dialog.
 
 If you accidentally tap "Deny", clear permissions in **Settings → Apps → Expo Go → Permissions**, then reopen the app. WorkProof itself doesn't appear in the apps list during dev — it lives inside Expo Go.
@@ -118,8 +117,8 @@ This is the tour you give a stakeholder. It hits every primitive without dwellin
 3. **0:15 — Take the photo.** Big shutter. One tap. Photo locks into the bundle and the screen flips to the voice-memo step.
 4. **0:25 — Record the voice memo.** Hold-to-record. Say something like "Replaced the kitchen sink trap, ran water for two minutes, no leaks." Release to stop. The waveform settles.
 5. **0:40 — Watch the transcription.** `TranscriptScreen` shows the recognized text on the notebook-paper surface. Edit inline if needed — the crew often fixes a job number or a customer name here.
-6. **0:55 — Sign the bundle.** Tap "Sign & seal". Under the hood, ethers.js hashes the photo + audio + transcript + GPS + timestamp and signs with the device key. The screen shows the short fingerprint.
-7. **1:10 — Export the PDF.** `expo-print` renders a one-pager with the photo, transcript, GPS pin, signature, and a QR pointing at the verifier. Tap **Share**.
+6. **0:55 — Sign the bundle.** Tap "Sign & seal". Under the hood, `expo-crypto` hashes the canonical record (fields + photo hash + audio hash + timestamp) and signs the digest with the device key. The screen shows the short fingerprint.
+7. **1:10 — Export the PDF.** `expo-print` renders a one-pager with the photo, transcript, location, signature, and a QR pointing at the verifier. Tap **Share**.
 8. **1:25 — Send via WhatsApp / email.** The native share sheet opens. Pick a contact. The PDF lands on the homeowner's phone within seconds.
 9. **1:30 — Done.** Close the loop: "That's the artifact. Anyone with the PDF can re-verify the signature later — the crew never had to leave Expo Go."
 
