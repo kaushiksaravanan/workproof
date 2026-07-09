@@ -309,4 +309,54 @@ describe('Card', () => {
       expect(rules.length).toBe(0);
     });
   });
+
+  describe('press feedback animation (animateTo)', () => {
+    it('fires pressIn + pressOut without crashing on an interactive card', () => {
+      const { getByRole } = renderWithTheme(
+        <Card onPress={() => undefined} accessibilityLabel="Interactive card">
+          <Text>Body</Text>
+        </Card>,
+      );
+      const node = getByRole('button');
+      // pressIn lifts the card, pressOut settles it back. Both go through
+      // animateTo(); the assertion is that neither throws + state stays sane.
+      expect(() => {
+        fireEvent(node, 'pressIn');
+        fireEvent(node, 'pressOut');
+      }).not.toThrow();
+    });
+
+    it('rapid pressIn/pressOut cycles do not throw (animation stopped + restarted)', () => {
+      const { getByRole } = renderWithTheme(
+        <Card onPress={() => undefined} accessibilityLabel="Interactive card">
+          <Text>Body</Text>
+        </Card>,
+      );
+      const node = getByRole('button');
+      expect(() => {
+        for (let i = 0; i < 5; i++) {
+          fireEvent(node, 'pressIn');
+          fireEvent(node, 'pressOut');
+        }
+      }).not.toThrow();
+    });
+
+    it('unmounts cleanly mid-animation without a "cannot update state on unmounted" warning', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const { getByRole, unmount } = renderWithTheme(
+        <Card onPress={() => undefined} accessibilityLabel="Interactive card">
+          <Text>Body</Text>
+        </Card>,
+      );
+      const node = getByRole('button');
+      fireEvent(node, 'pressIn'); // starts animation
+      unmount(); // cleanup effect should stop the in-flight animation
+      // No warnings from stopping a running Animated on unmount.
+      const badCalls = warn.mock.calls.filter((args) =>
+        String(args[0]).includes('unmounted'),
+      );
+      expect(badCalls).toHaveLength(0);
+      warn.mockRestore();
+    });
+  });
 });

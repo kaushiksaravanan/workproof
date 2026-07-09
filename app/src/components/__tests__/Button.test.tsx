@@ -196,4 +196,44 @@ describe('Button', () => {
       expect(hapticsFired).toBe(true);
     });
   });
+
+  describe('press feedback animation (animateTo)', () => {
+    it('fires pressIn + pressOut without crashing', () => {
+      const { getByRole } = renderWithTheme(
+        <Button label="Save" onPress={() => undefined} />,
+      );
+      const node = getByRole('button');
+      expect(() => {
+        fireEvent(node, 'pressIn');
+        fireEvent(node, 'pressOut');
+      }).not.toThrow();
+    });
+
+    it('rapid pressIn/pressOut cycles do not throw', () => {
+      const { getByRole } = renderWithTheme(
+        <Button label="Save" onPress={() => undefined} />,
+      );
+      const node = getByRole('button');
+      expect(() => {
+        for (let i = 0; i < 5; i++) {
+          fireEvent(node, 'pressIn');
+          fireEvent(node, 'pressOut');
+        }
+      }).not.toThrow();
+    });
+
+    it('unmounts cleanly mid-animation (stops in-flight timing)', () => {
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      const { getByRole, unmount } = renderWithTheme(
+        <Button label="Save" onPress={() => undefined} />,
+      );
+      fireEvent(getByRole('button'), 'pressIn');
+      unmount();
+      const bad = warn.mock.calls.filter((args) =>
+        String(args[0]).includes('unmounted'),
+      );
+      expect(bad).toHaveLength(0);
+      warn.mockRestore();
+    });
+  });
 });
