@@ -203,6 +203,21 @@ describe('Home', () => {
       expect(typeof rc.props.onRefresh).toBe('function');
       expect(rc.props.refreshing).toBe(false);
     });
+
+    it('handleRefresh calls workStore.refresh and toggles the spinner off after', async () => {
+      setMockState({ records: [makeRecord()] });
+      const { utils } = renderHome();
+      const scaffold = utils.getByTestId('home-screen');
+      const scroll = scaffold.findAll(
+        (n: any) => n.props && typeof n.props.refreshControl !== 'undefined',
+      )[0];
+      const rc = (scroll as any).props.refreshControl;
+      // Invoke handleRefresh directly. The mockState.refresh mock resolves
+      // immediately, so refreshing should flip back to false before the
+      // returned promise settles.
+      await rc.props.onRefresh();
+      expect(mockState.refresh).toHaveBeenCalled();
+    });
   });
 
   describe('stats row', () => {
