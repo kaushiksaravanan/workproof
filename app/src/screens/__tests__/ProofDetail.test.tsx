@@ -6,13 +6,26 @@ jest.mock('expo-av', () => {
   const statusListeners: Array<(s: any) => void> = [];
   class Sound {
     static _instances: Sound[] = [];
-    static _createAsyncFactory: (uri: string) => Promise<{ sound: Sound }> =
-      async () => ({ sound: new Sound() });
+    // Custom factory overrides the default (test-only escape hatch — set
+    // to null unless a test needs to inject a specific createAsync result,
+    // like a rejection for the load-failure path).
+    static _createAsyncFactory:
+      | ((uri: string) => Promise<{ sound: Sound }>)
+      | null = null;
     static createAsync = jest.fn(async (source: any, _opts: any, cb?: any) => {
+      // The default factory returns the SAME instance we push into _instances,
+      // so tests that grab `_instances[0]` see the exact Sound the component
+      // will hold in its `sound` state.
+      const custom = Sound._createAsyncFactory as
+        | ((s: any) => Promise<{ sound: Sound }>)
+        | null;
+      if (custom) {
+        return custom(source);
+      }
       const s = new Sound();
       if (cb) statusListeners.push(cb);
       Sound._instances.push(s);
-      return Sound._createAsyncFactory(source);
+      return { sound: s };
     });
     loadAsync = jest.fn(async () => undefined);
     unloadAsync = jest.fn(async () => undefined);
@@ -34,7 +47,7 @@ jest.mock('expo-av', () => {
     static _reset(): void {
       statusListeners.length = 0;
       Sound._instances.length = 0;
-      Sound._createAsyncFactory = async () => ({ sound: new Sound() });
+      Sound._createAsyncFactory = null;
     }
   }
   return {
@@ -462,6 +475,37 @@ describe('ProofDetail', () => {
         expect.objectContaining({ disabled: true }),
       );
       announceSpy.mockRestore();
+    });
+
+    it('pressing Play while paused calls sound.playAsync', async () => {
+      const { getByLabelText } = renderProofDetail('rec-queued');
+      await waitFor(() => {
+        expect(Audio.Sound.createAsync).toHaveBeenCalled();
+      });
+      await new Promise((r) => setTimeout(r, 0));
+      const sound = (Audio.Sound as unknown as { _instances: any[] })
+        ._instances[0];
+      expect(sound).toBeDefined();
+      fireEvent.press(getByLabelText('Play audio'));
+      await waitFor(() => {
+        expect(sound.playAsync).toHaveBeenCalledTimes(1);
+      });
+      expect(sound.pauseAsync).not.toHaveBeenCalled();
+    });
+
+    it('sound.getStatusAsync throwing is swallowed silently', async () => {
+      const { getByLabelText } = renderProofDetail('rec-queued');
+      await waitFor(() => {
+        expect(Audio.Sound.createAsync).toHaveBeenCalled();
+      });
+      await new Promise((r) => setTimeout(r, 0));
+      const sound = (Audio.Sound as unknown as { _instances: any[] })
+        ._instances[0];
+      sound.getStatusAsync.mockRejectedValueOnce(new Error('status boom'));
+      expect(() =>
+        fireEvent.press(getByLabelText('Play audio')),
+      ).not.toThrow();
+      await new Promise((r) => setTimeout(r, 30));
     });
   });
 
