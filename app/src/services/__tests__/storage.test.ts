@@ -215,3 +215,78 @@ describe('listRecords corruption resilience', () => {
     expect(list.map((r) => r.id)).toEqual(['good']);
   });
 });
+
+describe('AsyncStorage failure branches (defensive)', () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('readIndex → getAllKeys throwing returns []', async () => {
+    // First readIndex tries getItem(INDEX_KEY) — mock that to return null so
+    // it falls through to the getAllKeys rebuild branch, then make getAllKeys
+    // throw. listRecords should degrade to an empty list, not crash.
+    jest.spyOn(AsyncStorage, 'getItem').mockResolvedValueOnce(null);
+    jest
+      .spyOn(AsyncStorage, 'getAllKeys')
+      .mockRejectedValueOnce(new Error('backend gone'));
+    const list = await listRecords();
+    expect(list).toEqual([]);
+  });
+
+  it('getRecord returns null when the stored JSON is corrupt', async () => {
+    await AsyncStorage.setItem(`${RECORD_PREFIX}broken`, 'not-json-at-all');
+    // getRecord catches JSON.parse and returns null (line 82).
+    expect(await getRecord('broken')).toBeNull();
+  });
+
+  it('listRecords falls back to per-key getItem when multiGet throws', async () => {
+    await saveRecord(rec({ id: 'a', workType: 'roofing' }));
+    await saveRecord(rec({ id: 'b', workType: 'wiring' }));
+
+    // multiGet fails once — the per-key fallback loop should still surface
+    // both records.
+    jest
+      .spyOn(AsyncStorage, 'multiGet')
+      .mockRejectedValueOnce(new Error('multiGet unavailable'));
+
+    const list = await listRecords();
+    const types = list.map((r) => r.workType).sort();
+    expect(types).toEqual(['roofing', 'wiring']);
+  });
+
+  it('clearAll falls back to per-id removeItem when multiRemove throws', async () => {
+    await saveRecord(rec({ id: 'a' }));
+    await saveRecord(rec({ id: 'b' }));
+
+    // The initial getAllKeys succeeds, but multiRemove blows up — clearAll
+    // must fall back to iterating the index and calling removeItem per id.
+    jest
+      .spyOn(AsyncStorage, 'multiRemove')
+      .mockRejectedValueOnce(new Error('multiRemove not supported'));
+
+    await clearAll();
+
+    expect(await getRecord('a')).toBeNull();
+    expect(await getRecord('b')).toBeNull();
+    expect(await AsyncStorage.getItem(INDEX_KEY)).toBeNull();
+  });
+
+  it("clearAll's fallback tolerates per-id removeItem failures (partial cleanup still succeeds)", async () => {
+    await saveRecord(rec({ id: 'a' }));
+    await saveRecord(rec({ id: 'b' }));
+    await saveRecord(rec({ id: 'c' }));
+
+    jest
+      .spyOn(AsyncStorage, 'multiRemove')
+      .mockRejectedValueOnce(new Error('boom'));
+    // One removeItem call throws — the loop swallows the error and keeps going.
+    const removeSpy = jest.spyOn(AsyncStorage, 'removeItem');
+    // First removeItem call (for record 'a') fails, remaining calls succeed.
+    removeSpy.mockRejectedValueOnce(new Error('transient'));
+
+    await expect(clearAll()).resolves.toBeUndefined();
+    // Records 'b' and 'c' should still be gone.
+    expect(await getRecord('b')).toBeNull();
+    expect(await getRecord('c')).toBeNull();
+  });
+});
