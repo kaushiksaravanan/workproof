@@ -254,4 +254,31 @@ describe('Onboarding', () => {
     expect(queryByText('Get started')).toBeNull();
     expect(queryByText('Next')).toBeNull();
   });
+
+  it('pressing "Back" on slide 2 returns the user to slide 1', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValueOnce(null);
+    const onComplete = jest.fn();
+
+    const { findByText, getByText, queryByText } = render(
+      wrap(<Onboarding onComplete={onComplete} />),
+    );
+
+    await findByText('Log your work today.');
+
+    // Advance to slide 2 first — Back is only rendered on slide >= 2.
+    await act(async () => {
+      fireEvent.press(getByText('Next'));
+    });
+    await waitFor(() => expect(queryByText('Yours, offline.')).toBeTruthy());
+
+    await act(async () => {
+      fireEvent.press(getByText('Back'));
+    });
+
+    // Slide 1 copy should be back on screen.
+    await waitFor(() => expect(queryByText('Log your work today.')).toBeTruthy());
+    // Slide 2 copy should be gone.
+    expect(queryByText('Yours, offline.')).toBeNull();
+    expect(onComplete).not.toHaveBeenCalled();
+  });
 });
