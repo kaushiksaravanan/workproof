@@ -114,6 +114,62 @@ describe('workStore.upsert', () => {
     expect(storage.saveRecord).toHaveBeenCalledWith(fresh);
     expect(storage.updateRecord).not.toHaveBeenCalled();
   });
+
+  it('throws and sets error when repo.saveRecord rejects (insert path)', async () => {
+    (storage.saveRecord as jest.Mock).mockRejectedValueOnce(new Error('save failed'));
+    const fresh = baseRecord({ id: 'boom', createdAt: '2026-06-01T00:00:00.000Z' });
+    await expect(useWorkStore.getState().upsert(fresh)).rejects.toThrow(
+      'save failed',
+    );
+    expect(useWorkStore.getState().error).toBe('save failed');
+    // Failure must not add the record to state.
+    expect(useWorkStore.getState().records.find((r) => r.id === 'boom')).toBeUndefined();
+  });
+
+  it('throws and sets error when repo.updateRecord rejects (edit path)', async () => {
+    const r = baseRecord({ id: 'r1', createdAt: '2026-01-01T00:00:00.000Z', notes: 'orig' });
+    useWorkStore.setState({ records: [r] });
+    (storage.updateRecord as jest.Mock).mockRejectedValueOnce(new Error('patch failed'));
+
+    const edit = baseRecord({ id: 'r1', createdAt: '2026-01-01T00:00:00.000Z', notes: 'new' });
+    await expect(useWorkStore.getState().upsert(edit)).rejects.toThrow('patch failed');
+    expect(useWorkStore.getState().error).toBe('patch failed');
+    // In-memory record must NOT be optimistically mutated by the failed edit.
+    const still = useWorkStore.getState().records.find((x) => x.id === 'r1');
+    expect(still?.notes).toBe('orig');
+  });
+
+  it('surfaces string-thrown errors verbatim', async () => {
+    (storage.saveRecord as jest.Mock).mockRejectedValueOnce('bare string boom');
+    await expect(
+      useWorkStore.getState().upsert(
+        baseRecord({ id: 'strerr', createdAt: '2026-06-01T00:00:00.000Z' }),
+      ),
+    ).rejects.toBe('bare string boom');
+    expect(useWorkStore.getState().error).toBe('bare string boom');
+  });
+
+  it('serializes non-Error object throws via JSON.stringify', async () => {
+    (storage.saveRecord as jest.Mock).mockRejectedValueOnce({ code: 42, hint: 'nope' });
+    await expect(
+      useWorkStore.getState().upsert(
+        baseRecord({ id: 'objerr', createdAt: '2026-06-01T00:00:00.000Z' }),
+      ),
+    ).rejects.toEqual({ code: 42, hint: 'nope' });
+    expect(useWorkStore.getState().error).toBe('{"code":42,"hint":"nope"}');
+  });
+
+  it('falls back to "Unknown error" for un-stringifiable throws (circular ref)', async () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    (storage.saveRecord as jest.Mock).mockRejectedValueOnce(circular);
+    await expect(
+      useWorkStore.getState().upsert(
+        baseRecord({ id: 'circerr', createdAt: '2026-06-01T00:00:00.000Z' }),
+      ),
+    ).rejects.toBe(circular);
+    expect(useWorkStore.getState().error).toBe('Unknown error');
+  });
 });
 
 describe('workStore.remove', () => {
@@ -137,6 +193,17 @@ describe('workStore.remove', () => {
     await useWorkStore.getState().remove('does-not-exist');
     expect(useWorkStore.getState().records).toEqual([a]);
     expect(useWorkStore.getState().error).toBeNull();
+  });
+
+  it('throws and sets error when repo.deleteRecord rejects, keeping the record', async () => {
+    const a = baseRecord({ id: 'a', createdAt: '2026-01-01T00:00:00.000Z' });
+    useWorkStore.setState({ records: [a] });
+    (storage.deleteRecord as jest.Mock).mockRejectedValueOnce(new Error('locked'));
+
+    await expect(useWorkStore.getState().remove('a')).rejects.toThrow('locked');
+    expect(useWorkStore.getState().error).toBe('locked');
+    // Optimistic delete must be avoided on failure.
+    expect(useWorkStore.getState().records.map((r) => r.id)).toEqual(['a']);
   });
 });
 
