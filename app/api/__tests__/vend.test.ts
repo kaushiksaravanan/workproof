@@ -60,11 +60,23 @@ describe('/api/vend', () => {
     expect(res.headers['Cache-Control']).toBe('no-store');
   });
 
-  it('returns 405 for non-GET methods', async () => {
+  it('returns 405 for non-GET/HEAD methods', async () => {
     const res = makeRes();
     await handler(makeReq({ group: 'gemini' }, 'POST'), res);
     expect(res.statusCode).toBe(405);
     expect(res.body).toEqual({ error: 'method not allowed' });
+  });
+
+  it('allows HEAD (same handling as GET; ok for health probes)', async () => {
+    process.env.CIPHERSTACK_TOKEN = 'csk_test';
+    global.fetch = jest.fn().mockResolvedValue({
+      status: 200,
+      text: async () => JSON.stringify({ key: 'k' }),
+    }) as unknown as typeof fetch;
+    const res = makeRes();
+    await handler(makeReq({ group: 'gemini' }, 'HEAD'), res);
+    // HEAD flows through the same branch as GET — 200 not 405.
+    expect(res.statusCode).toBe(200);
   });
 
   it('returns 400 when group is missing', async () => {

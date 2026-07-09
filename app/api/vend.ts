@@ -39,7 +39,7 @@ export default async function handler(
 ): Promise<void> {
   res.setHeader("Cache-Control", "no-store");
 
-  if (req.method && req.method !== "GET") {
+  if (req.method && req.method !== "GET" && req.method !== "HEAD") {
     res.status(405).json({ error: "method not allowed" });
     return;
   }
