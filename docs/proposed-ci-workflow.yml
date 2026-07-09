@@ -1,0 +1,47 @@
+# Proposed GitHub Actions CI workflow.
+#
+# NOT active — the gh CLI token available in the session that generated the
+# WorkProof repo lacks the `workflow` OAuth scope, so pushing files under
+# .github/workflows/ is rejected by GitHub. To enable:
+#
+#   1. gh auth refresh -h github.com -s workflow
+#   2. mkdir -p .github/workflows
+#   3. mv docs/proposed-ci-workflow.yml .github/workflows/ci.yml
+#   4. git add -A && git commit -m "Enable CI" && git push
+#
+# Local `npx tsc --noEmit && npx jest --runInBand` gives the same signal today.
+
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./app
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: app/package-lock.json
+
+      - name: Install
+        run: npm install --legacy-peer-deps
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Test
+        run: npx jest --runInBand --colors=false
+
+      - name: Web build smoke
+        run: npx expo export --platform web --output-dir dist
