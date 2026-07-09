@@ -151,4 +151,39 @@ describe('PaperPlane — clamping (peggy-component-spec.md §Illustration)', () 
       expect(warnSpy).not.toHaveBeenCalled();
     });
   });
+
+  describe('accessibility', () => {
+    const findSvg = (node: any): any => {
+      if (!node) return null;
+      if (node.props?.accessibilityElementsHidden !== undefined) return node;
+      for (const c of node.children || []) {
+        const hit = findSvg(c);
+        if (hit) return hit;
+      }
+      return null;
+    };
+
+    it('is decorative by default (no accessibilityLabel → hidden from AT)', () => {
+      const { UNSAFE_root } = render(<PaperPlane size={24} rotation={10} />);
+      const svg = findSvg(UNSAFE_root);
+      expect(svg?.props.accessibilityElementsHidden).toBe(true);
+      expect(svg?.props.accessibilityRole).toBeUndefined();
+      expect(svg?.props.importantForAccessibility).toBe('no-hide-descendants');
+    });
+
+    it("exposes as an image with the label when accessibilityLabel is set", () => {
+      const { UNSAFE_root } = render(
+        <PaperPlane
+          size={24}
+          rotation={10}
+          accessibilityLabel="Paper plane accent"
+        />,
+      );
+      const svg = findSvg(UNSAFE_root);
+      expect(svg?.props.accessibilityRole).toBe('image');
+      expect(svg?.props.accessibilityLabel).toBe('Paper plane accent');
+      expect(svg?.props.accessibilityElementsHidden).toBe(false);
+      expect(svg?.props.importantForAccessibility).toBe('yes');
+    });
+  });
 });
