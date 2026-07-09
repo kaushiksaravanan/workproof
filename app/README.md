@@ -1,6 +1,6 @@
 # WorkProof — Mobile App
 
-Expo / React Native client for capturing signed proof-of-work bundles in the field.
+Expo / React Native client for capturing hashed & anchored proof-of-work bundles in the field.
 
 ## Prerequisites
 
@@ -117,10 +117,10 @@ This is the tour you give a stakeholder. It hits every primitive without dwellin
 3. **0:15 — Take the photo.** Big shutter. One tap. Photo locks into the bundle and the screen flips to the voice-memo step.
 4. **0:25 — Record the voice memo.** Hold-to-record. Say something like "Replaced the kitchen sink trap, ran water for two minutes, no leaks." Release to stop. The waveform settles.
 5. **0:40 — Watch the transcription.** `TranscriptScreen` shows the recognized text on the notebook-paper surface. Edit inline if needed — the crew often fixes a job number or a customer name here.
-6. **0:55 — Sign the bundle.** Tap "Sign & seal". Under the hood, `expo-crypto` hashes the canonical record (fields + photo hash + audio hash + timestamp) and signs the digest with the device key. The screen shows the short fingerprint.
-7. **1:10 — Export the PDF.** `expo-print` renders a one-pager with the photo, transcript, location, signature, and a QR pointing at the verifier. Tap **Share**.
+6. **0:55 — Save the proof.** Tap "Save proof". Under the hood, `expo-crypto` SHA-256 hashes the canonical record (fields + photo hash + audio hash). If an anchor contract address is configured, the hash is submitted to Polygon Amoy via ethers.js — the demo wallet signs the tx.
+7. **1:10 — Export the PDF.** `expo-print` renders a one-pager with the photo, transcript, location, hash, and a QR pointing at the verifier. Tap **Share**.
 8. **1:25 — Send via WhatsApp / email.** The native share sheet opens. Pick a contact. The PDF lands on the homeowner's phone within seconds.
-9. **1:30 — Done.** Close the loop: "That's the artifact. Anyone with the PDF can re-verify the signature later — the crew never had to leave Expo Go."
+9. **1:30 — Done.** Close the loop: "That's the artifact. Anyone with the PDF can re-verify the hash later — recompute SHA-256 of the canonical bundle, check it matches the on-chain anchor. The crew never had to leave Expo Go."
 
 If you have an extra 30 seconds, scroll back through previous proofs on the home screen and open one to show the immutable detail view.
 

@@ -1,6 +1,6 @@
 # WorkProof
 
-Field-ready proof-of-work capture for crews and contractors. Snap a photo, record a voice note, and produce a signed, shareable PDF that a homeowner or PM can verify on the spot.
+Field-ready proof-of-work capture for crews and contractors. Snap a photo, record a voice note, produce a hashed & anchored PDF that a homeowner or PM can verify on the spot.
 
 **Live demo (web):** <https://workproof-demo.vercel.app> — Peggy design system in the browser. Camera / mic / on-chain paths are no-ops on web; use Expo Go for the full flow.
 
@@ -16,7 +16,7 @@ WorkProof turns a 30-second site walkthrough into a tamper-evident record:
 
 - **Photo + voice + location** captured in a single flow.
 - **Audio + editable transcript** — the voice memo is the reference; the crew types the short report in an editable transcript field. Optional Gemini extraction pulls work type / client / amounts from the text.
-- **Cryptographic signing** (ethers.js) binds the bundle to a job key so the artifact can be re-verified later.
+- **Canonical SHA-256 hash** binds the bundle (fields + photo bytes + audio bytes) so tampering is detectable. The demo wallet (ethers.js) submits that hash to Polygon Amoy for a permanent timestamp.
 - **PDF export + share sheet** so the proof leaves the device through whatever channel the crew already uses (WhatsApp, email, SMS).
 
 ## Repository layout
