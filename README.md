@@ -47,4 +47,4 @@ Then open Expo Go on an Android phone, scan the QR code, and you're in. Full pre
 
 ## Status
 
-Demo-grade. The app boots, captures, signs, and exports end-to-end. 548 tests across 37 suites are green; TypeScript is clean under `strict`. Contracts compile but aren't deployed to Amoy. The Vercel web build ships without native modules (camera / mic) but with the full Peggy UI + a serverless `/api/vend` proxy that keeps the CipherStack service token off the client.
+Demo-grade. The app boots, captures, signs, and exports end-to-end. 567 tests across 37 suites are green; TypeScript is clean under `strict`. Contracts compile but aren't deployed to Amoy. The Vercel web build ships without native modules (camera / mic) but with the full Peggy UI + a serverless `/api/vend` proxy that keeps the CipherStack service token off the client.
