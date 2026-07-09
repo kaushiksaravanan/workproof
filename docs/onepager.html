@@ -246,34 +246,34 @@
 
       <div class="col">
         <h2>The Problem</h2>
-        <p class="lead">In a world where anyone can ship code, copy, and decks in minutes, "work" no longer proves work was done.</p>
+        <p class="lead">Contractors and crews finish jobs every day and can't prove it a week later — and $40B in trade-industry payments stall in disputes because there's no verifiable record.</p>
         <ul>
-          <li>Output volume has decoupled from effort, expertise, and accountability.</li>
-          <li>Managers can't tell genuine craft from a five-minute prompt.</li>
-          <li>Reviewers, auditors, and clients have no signal that survives the AI flood.</li>
-          <li>Trust in deliverables is collapsing right when stakes are rising.</li>
+          <li>Photos scatter across camera rolls, WhatsApp threads, and lost text messages.</li>
+          <li>A photo alone isn't proof: it has no timestamp, no location, no signature.</li>
+          <li>Customer disputes drag out final payment; crews eat the loss.</li>
+          <li>Existing tools require cloud logins that field workers won't use.</li>
         </ul>
       </div>
 
       <div class="col">
         <h2>Our Solution</h2>
-        <p class="lead">WorkProof captures cryptographically signed, replayable receipts of how work actually got made.</p>
+        <p class="lead">A 30-second capture flow on the crew's phone that turns each finished job into a signed, portable proof.</p>
         <ul>
-          <li>Lightweight agent records intent, edits, prompts, and decisions in the background.</li>
-          <li>Every session is hashed, timestamped, and signed — tamper-evident by design.</li>
-          <li>Shareable proof links: a verifier sees the story, not the secrets.</li>
-          <li>Privacy-first: redaction is local, disclosure is opt-in, granular, and revocable.</li>
+          <li>Photo + voice memo + GPS + timestamp, captured in one flow.</li>
+          <li>On-device transcription writes the report; no cloud upload of raw audio.</li>
+          <li>The bundle is hashed and signed with a device key; hash anchored on Polygon Amoy for permanent timestamping.</li>
+          <li>Exported as a one-page PDF with a verify QR — travels through WhatsApp, email, SMS.</li>
         </ul>
       </div>
 
       <div class="col">
         <h2>Why It Matters</h2>
-        <p class="lead">Proof of work becomes the new currency of professional trust.</p>
+        <p class="lead">A tamper-evident receipt that the crew already knows how to send.</p>
         <ul>
-          <li>Hiring & freelance: portfolios you can actually verify, not just claim.</li>
-          <li>Enterprise: audit trails for AI-assisted decisions and regulated workflows.</li>
-          <li>Education: assessments that reward process, not just polished output.</li>
-          <li>Open standard: portable receipts across tools, employers, and platforms.</li>
+          <li>Trades &amp; construction: paint, plumbing, roofing, wiring — dispute-proof the invoice.</li>
+          <li>Property management: proof of maintenance for absentee owners and compliance audits.</li>
+          <li>Gig platforms: verifiable job completion without giving the platform your camera roll.</li>
+          <li>Zero cloud dependency: works offline; queued proofs anchor when the phone reconnects.</li>
         </ul>
       </div>
 
@@ -283,18 +283,18 @@
     <footer class="strip">
       <p class="strip-label">Tech Stack</p>
       <div class="chips">
-        <span class="chip">Gemini 2.5</span>
-        <span class="chip">Vertex AI</span>
-        <span class="chip">Next.js</span>
+        <span class="chip">React Native</span>
+        <span class="chip">Expo SDK 54</span>
         <span class="chip">TypeScript</span>
-        <span class="chip">FastAPI</span>
-        <span class="chip">PostgreSQL</span>
-        <span class="chip">Ed25519</span>
-        <span class="chip">Merkle Trees</span>
-        <span class="chip">GCP Cloud Run</span>
-        <span class="chip">Firestore</span>
-        <span class="chip">Tailwind CSS</span>
-        <span class="chip">CDP</span>
+        <span class="chip">ethers.js</span>
+        <span class="chip">Polygon Amoy</span>
+        <span class="chip">expo-camera</span>
+        <span class="chip">expo-av</span>
+        <span class="chip">expo-print</span>
+        <span class="chip">AsyncStorage</span>
+        <span class="chip">Gemini (extraction)</span>
+        <span class="chip">CipherStack</span>
+        <span class="chip">Vercel (web build)</span>
       </div>
       <div class="built-at">
         <p class="text">Built at <strong>Google DeepMind Bangalore Hackathon</strong>, July 2026</p>
