@@ -9,7 +9,8 @@
 #   3. mv docs/proposed-ci-workflow.yml .github/workflows/ci.yml
 #   4. git add -A && git commit -m "Enable CI" && git push
 #
-# Local `npx tsc --noEmit && npx jest --runInBand` gives the same signal today.
+# Local `npm run verify` (in app/) reproduces the CI signal today
+# (tsc --noEmit + jest --ci --runInBand).
 
 name: CI
 
@@ -37,11 +38,9 @@ jobs:
       - name: Install
         run: npm install --legacy-peer-deps
 
-      - name: Typecheck
-        run: npx tsc --noEmit
-
-      - name: Test
-        run: npx jest --runInBand --colors=false
+      - name: Verify (typecheck + test)
+        run: npm run verify
 
       - name: Web build smoke
         run: npx expo export --platform web --output-dir dist
+
