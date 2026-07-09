@@ -505,6 +505,45 @@ describe('ProofDetail', () => {
       announceSpy.mockRestore();
     });
 
+    it('pressing Play after didJustFinish resets position to 0 before replaying', async () => {
+      const { getByLabelText } = renderProofDetail('rec-queued');
+      await waitFor(() => {
+        expect(Audio.Sound.createAsync).toHaveBeenCalled();
+      });
+      await new Promise((r) => setTimeout(r, 0));
+      const sound = (Audio.Sound as unknown as { _instances: any[] })
+        ._instances[0];
+      expect(sound).toBeDefined();
+      // Emit a didJustFinish=true status so the component's `progress` state
+      // hits >= 1 and the "audio ended" branch is armed. isPlaying flips
+      // back to false, so the button label reads 'Play audio'.
+      act(() => {
+        (Audio.Sound as unknown as { _emitStatus: (s: any) => void })._emitStatus({
+          isLoaded: true,
+          isPlaying: false,
+          didJustFinish: true,
+          durationMillis: 1000,
+          positionMillis: 1000,
+        });
+      });
+      // onToggle reads getStatusAsync — pin its didJustFinish=true so the
+      // rewind branch (line 144-145) executes.
+      sound.getStatusAsync.mockResolvedValue({
+        isLoaded: true,
+        isPlaying: false,
+        didJustFinish: true,
+        durationMillis: 1000,
+        positionMillis: 1000,
+      });
+      fireEvent.press(getByLabelText('Play audio'));
+      await waitFor(() => {
+        expect(sound.setPositionAsync).toHaveBeenCalledWith(0);
+      });
+      await waitFor(() => {
+        expect(sound.playAsync).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('pressing Play while paused calls sound.playAsync', async () => {
       const { getByLabelText } = renderProofDetail('rec-queued');
       await waitFor(() => {
