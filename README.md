@@ -4,6 +4,12 @@ Field-ready proof-of-work capture for crews and contractors. Snap a photo, recor
 
 **Live demo (web):** <https://workproof-demo.vercel.app> — Peggy design system in the browser. Camera / mic / on-chain paths are no-ops on web; use Expo Go for the full flow.
 
+## Screens
+
+| Onboarding | Home | Log Work | History |
+| --- | --- | --- | --- |
+| ![](docs/screenshots/01-onboarding.png) | ![](docs/screenshots/02-home.png) | ![](docs/screenshots/03-logwork.png) | ![](docs/screenshots/04-history.png) |
+
 ## What it does
 
 WorkProof turns a 30-second site walkthrough into a tamper-evident record:
