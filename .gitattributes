@@ -1,0 +1,30 @@
+# Normalize line endings across the repo. Everything is text unless proven
+# otherwise; the OS-specific checkouts stop translating LF → CRLF on Windows
+# (which was flooding every commit with warning noise).
+* text=auto eol=lf
+
+# Explicit binary blobs (Git shouldn't try to diff or normalize them).
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.ico binary
+*.pdf binary
+*.docx binary
+*.zip binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+
+# Force LF for source formats even on Windows checkouts.
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sol text eol=lf
