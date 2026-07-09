@@ -233,6 +233,23 @@ describe('History screen', () => {
     const rc2 = UNSAFE_getByType(RefreshControl);
     expect(rc2.props.refreshing).toBe(true);
   });
+
+  it("falls back to 'Untitled work' in the a11y label when workType is empty", () => {
+    // A record missing workType (e.g. saved before the field was added, or an
+    // extraction pipeline that failed to identify one). The renderItem
+    // accessibilityLabel should still be well-formed.
+    const noTitle: WorkRecord = {
+      ...anchoredRecord,
+      id: 'rec-untitled',
+      workType: '',
+      clientName: '',
+    };
+    mockState = makeMockState({ records: [noTitle] });
+    const { getByLabelText } = renderHistory();
+    // Label pattern: `<workType>, <amount>, <chipLabel>` — no clientName
+    // segment when clientName is empty.
+    expect(getByLabelText(/Untitled work.*Anchored/)).toBeTruthy();
+  });
 });
 
 describe('isHistoryFilter — filter-key type guard', () => {
