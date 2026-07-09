@@ -148,9 +148,9 @@ describe('buildProofHtml — worker name splitter', () => {
 });
 
 describe('buildProofHtml — anchored vs unanchored footer', () => {
-  it("unanchored: renders the 'locally signed / anchor in the app' pitch", () => {
+  it("unanchored: renders the 'not yet anchored / anchor in the app' pitch", () => {
     const html = buildProofHtml(record({ anchorTxHash: undefined }));
-    expect(html).toContain('locally signed');
+    expect(html).toContain('Not yet anchored');
     expect(html).not.toContain('amoy.polygonscan.com/tx/');
   });
 
@@ -162,11 +162,11 @@ describe('buildProofHtml — anchored vs unanchored footer', () => {
     expect(html).toContain('Anchored on-chain');
   });
 
-  it("queued: prefix does NOT count as anchored (uses the local-signed copy)", () => {
+  it("queued: prefix does NOT count as anchored (uses the not-yet-anchored copy)", () => {
     const html = buildProofHtml(
       record({ anchorTxHash: 'queued:xyz', anchorChainId: 80002 }),
     );
-    expect(html).toContain('locally signed');
+    expect(html).toContain('Not yet anchored');
     expect(html).not.toContain('amoy.polygonscan.com');
   });
 });

@@ -317,7 +317,7 @@ export function buildProofHtml(rec: WorkRecord): string {
   <div class="header">
     <div>
       <h1>WorkProof</h1>
-      <div class="tagline">Receipt of work — signed, hashed, on-chain.</div>
+      <div class="tagline">Receipt of work — hashed, anchored, portable.</div>
     </div>
     <div class="planes">
       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -389,7 +389,7 @@ export function buildProofHtml(rec: WorkRecord): string {
             ? `Anchored on-chain. Verify by visiting:<br/><a href="${escapeHtml(
                 explorer
               )}">${escapeHtml(explorer)}</a>`
-            : "This receipt is locally signed. Anchor it on-chain in the WorkProof app to make it independently verifiable."
+            : "Not yet anchored. Anchor this record on-chain in the WorkProof app to make the timestamp independently verifiable."
         }
       </div>
     </div>
