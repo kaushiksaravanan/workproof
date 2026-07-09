@@ -26,7 +26,7 @@ import { anchorHash, explorerUrl } from '../services/anchor';
 import { generateProofPdf, shareProofPdf } from '../services/proof';
 import type { RootStackParamList } from '../navigation/types';
 import type { WorkRecord } from '../types';
-import { isAnchored, isQueuedAnchor } from '../utils/record';
+import { isAnchored, isQueuedAnchor, chunkHash } from '../utils/record';
 
 /**
  * ProofDetail — full read of a single saved WorkRecord.
@@ -48,16 +48,6 @@ export type ProofDetailProps = NativeStackScreenProps<
   RootStackParamList,
   'ProofDetail'
 >;
-
-const HASH_CHUNK = 8;
-
-function chunkHash(hash: string): string[] {
-  const out: string[] = [];
-  for (let i = 0; i < hash.length; i += HASH_CHUNK) {
-    out.push(hash.slice(i, i + HASH_CHUNK));
-  }
-  return out;
-}
 
 function formatAmount(value: number | undefined): string {
   if (value === undefined || !Number.isFinite(value)) return '—';
