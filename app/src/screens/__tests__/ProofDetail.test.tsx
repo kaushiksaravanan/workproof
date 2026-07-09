@@ -464,4 +464,95 @@ describe('ProofDetail', () => {
       announceSpy.mockRestore();
     });
   });
+
+  describe('Polygonscan explorer link (anchored record)', () => {
+    const { Linking } = require('react-native') as {
+      Linking: {
+        canOpenURL: jest.Mock;
+        openURL: jest.Mock;
+      };
+    };
+
+    beforeEach(() => {
+      // Fresh spies each test so we don't leak assertions across cases.
+      jest.spyOn(Linking, 'canOpenURL').mockResolvedValue(true);
+      jest.spyOn(Linking, 'openURL').mockResolvedValue(undefined);
+    });
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    it('renders the Polygonscan link text on an anchored record', () => {
+      const { getByText } = renderProofDetail('rec-anchored');
+      expect(getByText('amoy.polygonscan.com')).toBeTruthy();
+    });
+
+    it('pressing the explorer link opens the Polygonscan URL via Linking', async () => {
+      const { getByLabelText } = renderProofDetail('rec-anchored');
+      const link = getByLabelText(/Open transaction on Polygonscan/);
+      fireEvent.press(link);
+      await waitFor(() => {
+        expect(Linking.canOpenURL).toHaveBeenCalledWith(
+          expect.stringContaining('amoy.polygonscan.com/tx/'),
+        );
+      });
+      await waitFor(() => {
+        expect(Linking.openURL).toHaveBeenCalled();
+      });
+    });
+
+    it("shows an Alert when canOpenURL returns false ('no app can open this link')", async () => {
+      (Linking.canOpenURL as jest.Mock).mockResolvedValueOnce(false);
+      const alertSpy = jest
+        .spyOn(require('react-native').Alert, 'alert')
+        .mockImplementation(() => {});
+      const { getByLabelText } = renderProofDetail('rec-anchored');
+      fireEvent.press(getByLabelText(/Open transaction on Polygonscan/));
+      await waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledWith(
+          'Cannot open Polygonscan',
+          expect.stringContaining('No app can open this link'),
+        );
+      });
+      expect(Linking.openURL).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
+    });
+
+    it('shows an Alert when openURL rejects with an error', async () => {
+      (Linking.openURL as jest.Mock).mockRejectedValueOnce(
+        new Error('browser missing'),
+      );
+      const alertSpy = jest
+        .spyOn(require('react-native').Alert, 'alert')
+        .mockImplementation(() => {});
+      const { getByLabelText } = renderProofDetail('rec-anchored');
+      fireEvent.press(getByLabelText(/Open transaction on Polygonscan/));
+      await waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledWith(
+          'Cannot open Polygonscan',
+          'browser missing',
+        );
+      });
+      alertSpy.mockRestore();
+    });
+
+    it("falls back to 'Could not open Polygonscan' for a non-Error throw", async () => {
+      (Linking.canOpenURL as jest.Mock).mockImplementationOnce(() =>
+        Promise.reject('bare string boom'),
+      );
+      const alertSpy = jest
+        .spyOn(require('react-native').Alert, 'alert')
+        .mockImplementation(() => {});
+      const { getByLabelText } = renderProofDetail('rec-anchored');
+      fireEvent.press(getByLabelText(/Open transaction on Polygonscan/));
+      await waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledWith(
+          'Cannot open Polygonscan',
+          'Could not open Polygonscan',
+        );
+      });
+      alertSpy.mockRestore();
+    });
+  });
 });
