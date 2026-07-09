@@ -245,9 +245,9 @@ export function Onboarding({ onComplete }: OnboardingProps): React.ReactElement 
                 />
               </View>
               <Text style={styles.body}>
-                Capture what you did with your voice, a quick photo, and
-                on-device AI that turns it into a tidy proof of work — no
-                cloud round-trip required.
+                Capture what you did — a quick photo, a voice memo, and a
+                short typed transcript. Your record stays on the phone
+                until you choose to share the PDF.
               </Text>
             </>
           ) : null}
