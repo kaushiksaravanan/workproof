@@ -644,7 +644,7 @@
       <div class="node client">
         <div class="icon">RN</div>
         <h3>RN Client</h3>
-        <p>React Native app. Captures evidence, signs locally with secp256k1.</p>
+        <p>React Native app. Captures photo + audio + typed transcript; hashes locally via expo-crypto.</p>
       </div>
       <div class="arch-arrow">
         <svg viewBox="0 0 44 24" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round">
@@ -654,8 +654,8 @@
       </div>
       <div class="node llm">
         <div class="icon">AI</div>
-        <h3>On-device LLM</h3>
-        <p>Llama 3.2 1B via llama.rn. Summarizes evidence offline.</p>
+        <h3>Gemini (optional)</h3>
+        <p>Extractor pulls work-type / client / amounts from the typed transcript. Vended via CipherStack through the /api/vend serverless proxy; regex baseline works fully offline.</p>
       </div>
       <div class="arch-arrow">
         <svg viewBox="0 0 44 24" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round">
@@ -666,7 +666,7 @@
       <div class="node hash">
         <div class="icon">#</div>
         <h3>SHA-256</h3>
-        <p>Deterministic hash of summary, time, and signer pubkey.</p>
+        <p>Deterministic hash of the canonical record — fields + photo hash + audio hash.</p>
       </div>
       <div class="arch-arrow">
         <svg viewBox="0 0 44 24" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round">
