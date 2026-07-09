@@ -51,6 +51,17 @@ jest.mock('../src/services/reconcile', () => ({
   reconcileAnchoredHashes: jest.fn(async () => undefined),
 }));
 
+jest.mock('../src/state/workStore', () => {
+  const state = {
+    records: [],
+    setAnchored: jest.fn(async () => undefined),
+    refresh: jest.fn(async () => undefined),
+  };
+  const useWorkStore: any = () => state;
+  useWorkStore.getState = () => state;
+  return { useWorkStore };
+});
+
 // AppState mock — accept the listener but never fire.
 jest.mock('react-native/Libraries/AppState/AppState', () => ({
   addEventListener: jest.fn(() => ({ remove: jest.fn() })),
@@ -58,6 +69,8 @@ jest.mock('react-native/Libraries/AppState/AppState', () => ({
 
 import { render } from '@testing-library/react-native';
 import App from '../App';
+import { flushQueue } from '../src/services/anchor';
+import { useWorkStore } from '../src/state/workStore';
 
 describe('App — root splash / mounted branches', () => {
   beforeEach(() => {
@@ -89,4 +102,24 @@ describe('App — root splash / mounted branches', () => {
   // verified via browser-harness in earlier sessions), and the pure
   // drainQueueAndReconcile logic App.tsx used to hold now lives in
   // services/reconcile.ts with its own 8-test suite.
+
+  it('once fonts load, kicks off workStore.refresh() during the hydrate effect', async () => {
+    mockFontsResult = { loaded: true, error: null };
+    // Rendering may throw during the mounted branch because AppState /
+    // NavigationContainer isn't fully mocked, but the effects at the top of
+    // the second useEffect (refresh + drainQueueAndReconcile) fire BEFORE
+    // the navigator is mounted. Wrap in try/catch so we still get to inspect
+    // the store spy after render.
+    const refreshSpy = useWorkStore.getState().refresh as jest.Mock;
+    refreshSpy.mockClear();
+    (flushQueue as jest.Mock).mockClear();
+    try {
+      render(<App />);
+    } catch {
+      /* ignore navigator mount fallout — we only care about the effects */
+    }
+    // The useEffect scheduler runs asynchronously; yield a microtask.
+    await new Promise((r) => setImmediate(r));
+    expect(refreshSpy).toHaveBeenCalled();
+  });
 });
