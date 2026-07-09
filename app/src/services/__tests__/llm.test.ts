@@ -299,3 +299,108 @@ describe('vendGeminiKey — CipherStack vend flow', () => {
     expect(await vendGeminiKey()).toBeNull();
   });
 });
+
+describe('extractWorkFields — online (Gemini-augmented) path', () => {
+  const originalFetch = global.fetch;
+  const originalOS = Platform.OS;
+
+  afterEach(() => {
+    global.fetch = originalFetch;
+    Object.defineProperty(Platform, 'OS', { value: originalOS, configurable: true });
+  });
+
+  const setOS = (os: 'web' | 'ios' | 'android'): void => {
+    Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
+  };
+
+  // Helper: two-stage fetch mock — first call vends a key, second is Gemini.
+  const mockVendThenGemini = (
+    geminiResponse: { ok: boolean; text?: string } = {
+      ok: true,
+      text: '{"workType":"tiling","clientName":"","location":"","amountReceived":0,"amountPending":0,"notes":""}',
+    },
+  ): jest.Mock => {
+    return jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          key: 'AIzaFAKE',
+          base_url: 'https://gen.example/v1',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: geminiResponse.ok,
+        json: async () => ({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: geminiResponse.text ?? '' }],
+              },
+            },
+          ],
+        }),
+      });
+  };
+
+  it('online:true fills empty regex fields from Gemini output', async () => {
+    setOS('ios');
+    global.fetch = mockVendThenGemini() as any;
+    // Transcript that regex can't parse into workType (no allow-list hit).
+    const out = await extractWorkFields('the bathroom job is finished', {
+      online: true,
+    });
+    // Regex baseline leaves workType empty → Gemini fills it with "tiling".
+    expect(out.workType).toBe('tiling');
+  });
+
+  it('regex numeric baseline wins over Gemini (no hallucinated amounts)', async () => {
+    setOS('ios');
+    global.fetch = mockVendThenGemini({
+      ok: true,
+      // Gemini claims 99999 — regex saw "got 500" — the 500 must win.
+      text: '{"workType":"","clientName":"","location":"","amountReceived":99999,"amountPending":0,"notes":""}',
+    }) as any;
+    const out = await extractWorkFields('did some work, got 500', {
+      online: true,
+    });
+    expect(out.amountReceived).toBe(500);
+  });
+
+  it('falls back to regex baseline when vendGeminiKey fails', async () => {
+    setOS('ios');
+    // First call (vend) fails.
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: 'no keys' }),
+    }) as any;
+    const out = await extractWorkFields('plastering for Sharma got 5000', {
+      online: true,
+    });
+    expect(out.workType).toBe('plastering');
+    expect(out.amountReceived).toBe(5000);
+  });
+
+  it('falls back to regex baseline when Gemini upstream is non-ok', async () => {
+    setOS('ios');
+    global.fetch = mockVendThenGemini({ ok: false, text: '' }) as any;
+    const out = await extractWorkFields('Did painting for Mehta. Got 3000.', {
+      online: true,
+    });
+    // Regex baseline still returns painting + 3000.
+    expect(out.workType).toBe('painting');
+    expect(out.amountReceived).toBe(3000);
+  });
+
+  it('falls back to regex baseline when Gemini text is unparseable JSON', async () => {
+    setOS('ios');
+    global.fetch = mockVendThenGemini({
+      ok: true,
+      text: 'not-valid-json-at-all',
+    }) as any;
+    const out = await extractWorkFields('Did painting. Got 3000.', { online: true });
+    // JSON.parse throws inside geminiExtract → returns null → baseline kept.
+    expect(out.workType).toBe('painting');
+    expect(out.amountReceived).toBe(3000);
+  });
+});
