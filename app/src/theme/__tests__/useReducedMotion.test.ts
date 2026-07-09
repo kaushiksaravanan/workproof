@@ -11,7 +11,7 @@
  * promise. If the gate works, no console.error is emitted.
  */
 
-import { renderHook } from '@testing-library/react-native';
+import { act, renderHook } from '@testing-library/react-native';
 import { AccessibilityInfo } from 'react-native';
 
 import { useReducedMotion } from '../useReducedMotion';
@@ -119,5 +119,76 @@ describe('useReducedMotion — does not setReduce after unmount', () => {
     unmount();
 
     expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it('reduceMotionChanged listener flips the value while mounted', async () => {
+    // Capture the listener the hook registers so we can invoke it manually.
+    let listener: ((enabled: boolean) => void) | undefined;
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockResolvedValue(false);
+    jest
+      .spyOn(AccessibilityInfo, 'addEventListener')
+      .mockImplementation(((event: string, cb: (enabled: boolean) => void) => {
+        if (event === 'reduceMotionChanged') listener = cb;
+        return { remove: jest.fn() } as unknown as ReturnType<
+          typeof AccessibilityInfo.addEventListener
+        >;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any);
+
+    const { result } = renderHook(() => useReducedMotion());
+    // Flush the initial isReduceMotionEnabled promise.
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(result.current).toBe(false);
+    expect(listener).toBeDefined();
+
+    // Simulate the OS toggling Reduce Motion on. This exercises the
+    // in-listener `if (mounted) setReduce(enabled)` branch (line 27). Wrap
+    // in act() so React commits the setState before we assert.
+    await act(async () => {
+      listener?.(true);
+    });
+    expect(result.current).toBe(true);
+
+    // And toggling back off:
+    await act(async () => {
+      listener?.(false);
+    });
+    expect(result.current).toBe(false);
+  });
+
+  it('post-unmount reduceMotionChanged events do NOT setReduce (mounted gate)', async () => {
+    let listener: ((enabled: boolean) => void) | undefined;
+    jest
+      .spyOn(AccessibilityInfo, 'isReduceMotionEnabled')
+      .mockResolvedValue(false);
+    jest
+      .spyOn(AccessibilityInfo, 'addEventListener')
+      .mockImplementation(((event: string, cb: (enabled: boolean) => void) => {
+        if (event === 'reduceMotionChanged') listener = cb;
+        return { remove: jest.fn() } as unknown as ReturnType<
+          typeof AccessibilityInfo.addEventListener
+        >;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      }) as any);
+
+    const { unmount } = renderHook(() => useReducedMotion());
+    await Promise.resolve();
+    unmount();
+    // Fire event AFTER unmount. mounted is false; setReduce must NOT be
+    // called. If it were, react-test-renderer would log a "not wrapped in
+    // act" warning, which our afterEach spy catches.
+    listener?.(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    const actWarnings = errorSpy.mock.calls.filter((args: unknown[]) =>
+      args.some(
+        (a: unknown) =>
+          typeof a === 'string' && a.includes('not wrapped in act'),
+      ),
+    );
+    expect(actWarnings).toHaveLength(0);
   });
 });

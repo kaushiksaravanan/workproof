@@ -136,7 +136,13 @@ describe('canonicalize', () => {
 
   it('is order-independent w.r.t. how the record was built', () => {
     const r1 = { ...baseRecord(), workType: 'painting', amountReceived: 500 } as WorkRecord;
-    const r2 = { amountReceived: 500, ...baseRecord(), workType: 'painting' } as WorkRecord;
+    // Build r2 with an equal shape via a different construction path.
+    // Since baseRecord() already contains workType + amountReceived, we
+    // clone the spread + patch the two fields to prove canonicalize doesn't
+    // depend on JS insertion order.
+    const r2: WorkRecord = { ...baseRecord() };
+    r2.workType = 'painting';
+    r2.amountReceived = 500;
     expect(canonicalize(r1, 'ph')).toBe(canonicalize(r2, 'ph'));
   });
 });

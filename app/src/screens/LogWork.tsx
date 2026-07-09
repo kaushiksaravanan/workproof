@@ -84,13 +84,39 @@ function formatTimer(ms: number): string {
   return `${mm}:${ss}`;
 }
 
-// Exported for unit testing; also re-usable by any future screen that needs
-// mm:ss timer formatting.
-export { formatTimer };
-
 interface ReviewFields extends ExtractedFields {
   workerName: string;
 }
+
+/**
+ * Pure predicate: is the LogWork sheet "dirty" — i.e. does the user have
+ * anything worth losing? Drives the drag-to-dismiss confirmation.
+ * Exported for unit testing; also lets other flows reuse the same rule.
+ */
+function isDirtyOf(
+  fields: Pick<ReviewFields, 'workType' | 'clientName' | 'location' | 'notes'>,
+  amountReceivedRaw: string,
+  amountPendingRaw: string,
+  transcript: string,
+  audioUri: string | null,
+  photoUri: string | null,
+): boolean {
+  return (
+    fields.workType.trim().length > 0 ||
+    (fields.clientName ?? '').trim().length > 0 ||
+    (fields.location ?? '').trim().length > 0 ||
+    (fields.notes ?? '').trim().length > 0 ||
+    amountReceivedRaw.trim().length > 0 ||
+    amountPendingRaw.trim().length > 0 ||
+    transcript.trim().length > 0 ||
+    audioUri !== null ||
+    photoUri !== null
+  );
+}
+
+// Exported for unit testing; also re-usable by any future screen that needs
+// mm:ss timer formatting or the dirty-guard predicate.
+export { formatTimer, isDirtyOf };
 
 interface RoundRecordButtonProps {
   isRecording: boolean;
@@ -382,16 +408,14 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
   // amounts, notes, or a recording), confirm before letting the sheet close.
   // formSheet presentation makes the swipe-down very easy to trigger, so this
   // prevents accidental loss of in-progress logs.
-  const isDirty =
-    fields.workType.trim().length > 0 ||
-    (fields.clientName ?? '').trim().length > 0 ||
-    (fields.location ?? '').trim().length > 0 ||
-    (fields.notes ?? '').trim().length > 0 ||
-    amountReceivedRaw.trim().length > 0 ||
-    amountPendingRaw.trim().length > 0 ||
-    transcript.trim().length > 0 ||
-    audioUri !== null ||
-    photoUri !== null;
+  const isDirty = isDirtyOf(
+    fields,
+    amountReceivedRaw,
+    amountPendingRaw,
+    transcript,
+    audioUri,
+    photoUri,
+  );
 
   useEffect(() => {
     // Skip the guard while the save flow is mid-flight: navigation.replace

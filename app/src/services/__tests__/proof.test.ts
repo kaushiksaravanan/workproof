@@ -112,9 +112,11 @@ describe('buildProofHtml — photo URL scheme allow-list', () => {
   it('empty / undefined photoUri does NOT render the Photo section', () => {
     expect(buildProofHtml(record({ photoUri: '' as unknown as string })))
       .not.toMatch(/section-title">Photo</);
-    // @ts-expect-error deliberate — testing the runtime fallback
-    expect(buildProofHtml(record({ photoUri: undefined })))
-      .not.toMatch(/section-title">Photo</);
+    // Testing the runtime undefined fallback — cast around the required-string
+    // constraint so tsc doesn't flag it (the runtime code handles it fine).
+    expect(
+      buildProofHtml(record({ photoUri: undefined as unknown as string })),
+    ).not.toMatch(/section-title">Photo</);
   });
 });
 
