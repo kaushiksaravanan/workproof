@@ -114,9 +114,19 @@ function isDirtyOf(
   );
 }
 
+/**
+ * Parse a raw amount input string into a finite number, defaulting to 0.
+ * Handles empty strings, leading zeros, decimals, and NaN/Infinity from
+ * parseFloat. Pure and exported for unit testing.
+ */
+function parseAmountOrZero(raw: string): number {
+  const n = Number.parseFloat(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
 // Exported for unit testing; also re-usable by any future screen that needs
 // mm:ss timer formatting or the dirty-guard predicate.
-export { formatTimer, isDirtyOf };
+export { formatTimer, isDirtyOf, parseAmountOrZero };
 
 interface RoundRecordButtonProps {
   isRecording: boolean;
@@ -725,8 +735,8 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
         : undefined;
       const id = uuidv4();
       const createdAt = new Date().toISOString();
-      const parsedAmountReceived = Number.parseFloat(amountReceivedRaw) || 0;
-      const parsedAmountPending = Number.parseFloat(amountPendingRaw) || 0;
+      const parsedAmountReceived = parseAmountOrZero(amountReceivedRaw);
+      const parsedAmountPending = parseAmountOrZero(amountPendingRaw);
       const draft: WorkRecord = {
         id,
         createdAt,

@@ -45,7 +45,7 @@ jest.mock('../../services/hashing', () => ({
 jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
 jest.mock('react-native-get-random-values', () => ({}));
 
-import { isDirtyOf } from '../LogWork';
+import { isDirtyOf, parseAmountOrZero } from '../LogWork';
 
 const empty = {
   workType: '',
@@ -130,5 +130,59 @@ describe('isDirtyOf — drag-to-dismiss predicate', () => {
     // means the user progressed past the capture step at least once. Cross
     // this branch with an explicit '' to lock the semantics.
     expect(isDirtyOf(empty, '', '', '', null, '')).toBe(true);
+  });
+});
+
+describe('parseAmountOrZero — amount input coercion', () => {
+  it('returns 0 for empty string', () => {
+    expect(parseAmountOrZero('')).toBe(0);
+  });
+
+  it('returns 0 for pure whitespace', () => {
+    expect(parseAmountOrZero('   ')).toBe(0);
+  });
+
+  it('parses a plain integer', () => {
+    expect(parseAmountOrZero('5000')).toBe(5000);
+  });
+
+  it('parses a decimal', () => {
+    expect(parseAmountOrZero('1234.56')).toBe(1234.56);
+  });
+
+  it('parses a leading-zero decimal', () => {
+    expect(parseAmountOrZero('0.5')).toBe(0.5);
+  });
+
+  it('parses a partial-numeric prefix (parseFloat semantics: "5k" → 5)', () => {
+    expect(parseAmountOrZero('5k')).toBe(5);
+  });
+
+  it('returns 0 for a non-numeric string', () => {
+    expect(parseAmountOrZero('abc')).toBe(0);
+  });
+
+  it('returns 0 for "Infinity" (Number.isFinite guard)', () => {
+    expect(parseAmountOrZero('Infinity')).toBe(0);
+  });
+
+  it('returns 0 for "-Infinity"', () => {
+    expect(parseAmountOrZero('-Infinity')).toBe(0);
+  });
+
+  it('returns 0 for "NaN" literal', () => {
+    expect(parseAmountOrZero('NaN')).toBe(0);
+  });
+
+  it('handles negative numbers (parseFloat allows leading minus)', () => {
+    expect(parseAmountOrZero('-500')).toBe(-500);
+  });
+
+  it('handles scientific notation', () => {
+    expect(parseAmountOrZero('1e3')).toBe(1000);
+  });
+
+  it('trims leading whitespace naturally via parseFloat', () => {
+    expect(parseAmountOrZero('   500')).toBe(500);
   });
 });
