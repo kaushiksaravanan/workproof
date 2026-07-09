@@ -20,6 +20,7 @@ import { LogWork } from './src/screens/LogWork';
 import { ProofDetail } from './src/screens/ProofDetail';
 import { History } from './src/screens/History';
 import { flushQueue } from './src/services/anchor';
+import { reconcileAnchoredHashes } from './src/services/reconcile';
 import { useWorkStore } from './src/state/workStore';
 
 /**
@@ -83,21 +84,7 @@ export default function App(): React.ReactElement {
         if (cancelled || results.length === 0) return;
         const records = useWorkStore.getState().records;
         const setAnchored = useWorkStore.getState().setAnchored;
-        for (const { hashHex, result } of results) {
-          // A record is queued if its anchorTxHash is `queued:<hashHex>`.
-          // Match by hash (record.hash) for resilience.
-          const queuedRecords = records.filter(
-            (r) =>
-              r.hash === hashHex && r.anchorTxHash === `queued:${hashHex}`,
-          );
-          for (const r of queuedRecords) {
-            try {
-              await setAnchored(r.id, result.txHash, result.chainId);
-            } catch {
-              // ignore individual reconcile failures
-            }
-          }
-        }
+        await reconcileAnchoredHashes(results, records, setAnchored);
       } catch {
         // Drain failures are non-fatal; we'll retry next foreground.
       }
