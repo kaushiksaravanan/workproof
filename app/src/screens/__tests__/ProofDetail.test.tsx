@@ -225,6 +225,15 @@ describe('ProofDetail', () => {
     expect(nav.goBack).toHaveBeenCalledTimes(1);
   });
 
+  it("pressing 'Back' falls back to navigate('Home') when canGoBack is false", () => {
+    const nav = makeNav();
+    nav.canGoBack = jest.fn(() => false);
+    const { getByText } = renderProofDetail('rec-anchored', nav);
+    fireEvent.press(getByText('Back'));
+    expect(nav.goBack).not.toHaveBeenCalled();
+    expect(nav.navigate).toHaveBeenCalledWith('Home');
+  });
+
   it("missing record renders the 'Proof not found' fallback", () => {
     const { getByText } = renderProofDetail('does-not-exist');
     expect(getByText('Proof not found')).toBeTruthy();
