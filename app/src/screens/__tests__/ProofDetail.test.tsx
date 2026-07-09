@@ -267,4 +267,87 @@ describe('ProofDetail', () => {
     const { getByText } = renderProofDetail('rec-queued');
     expect(getByText('Voice note')).toBeTruthy();
   });
+
+  describe('error paths', () => {
+    it("share failure surfaces an Alert with the thrown error's message", async () => {
+      const alertSpy = jest
+        .spyOn(require('react-native').Alert, 'alert')
+        .mockImplementation(() => {});
+      mockGenerateProofPdf.mockRejectedValueOnce(new Error('PDF gen busted'));
+      const { getByText } = renderProofDetail('rec-anchored');
+
+      fireEvent.press(getByText('Share proof PDF'));
+      await waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledWith('Share failed', 'PDF gen busted');
+      });
+      expect(mockShareProofPdf).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
+    });
+
+    it("share failure with a non-Error throw uses the 'Share failed' fallback", async () => {
+      const alertSpy = jest
+        .spyOn(require('react-native').Alert, 'alert')
+        .mockImplementation(() => {});
+      // Reject with a bare string — hits the `!(err instanceof Error)` branch.
+      mockGenerateProofPdf.mockImplementationOnce(() =>
+        Promise.reject('bare string'),
+      );
+      const { getByText } = renderProofDetail('rec-anchored');
+
+      fireEvent.press(getByText('Share proof PDF'));
+      await waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledWith('Share failed', 'Share failed');
+      });
+      alertSpy.mockRestore();
+    });
+
+    it("anchor failure surfaces an Alert and doesn't call setAnchored", async () => {
+      const alertSpy = jest
+        .spyOn(require('react-native').Alert, 'alert')
+        .mockImplementation(() => {});
+      mockAnchorHash.mockRejectedValueOnce(new Error('RPC unreachable'));
+      const { getByText } = renderProofDetail('rec-queued');
+
+      // rec-queued renders 'Retry anchor'.
+      fireEvent.press(getByText('Retry anchor'));
+      await waitFor(() => {
+        expect(alertSpy).toHaveBeenCalledWith(
+          'Anchor failed',
+          'RPC unreachable',
+        );
+      });
+      expect(mockState.setAnchored).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
+    });
+
+    it("delete failure surfaces an Alert and keeps the user on the screen", async () => {
+      const alertMock = jest.fn();
+      const alertSpy = jest
+        .spyOn(require('react-native').Alert, 'alert')
+        .mockImplementation(alertMock);
+      const nav = makeNav();
+      mockState.remove.mockRejectedValueOnce(new Error('disk offline'));
+
+      const { getByText } = renderProofDetail('rec-anchored', nav);
+      fireEvent.press(getByText('Delete'));
+
+      // First Alert is the confirmation. Grab its destructive button.
+      expect(alertMock).toHaveBeenCalledTimes(1);
+      const [, , buttons] = alertMock.mock.calls[0];
+      const destructive = (
+        buttons as Array<{ style?: string; onPress?: () => Promise<void> }>
+      ).find((b) => b.style === 'destructive');
+      await destructive?.onPress?.();
+
+      // Second Alert is the failure surface.
+      await waitFor(() => {
+        expect(alertMock).toHaveBeenCalledTimes(2);
+      });
+      expect(alertMock.mock.calls[1][0]).toBe('Delete failed');
+      expect(alertMock.mock.calls[1][1]).toBe('disk offline');
+      // The failure must NOT navigate away.
+      expect(nav.goBack).not.toHaveBeenCalled();
+      alertSpy.mockRestore();
+    });
+  });
 });
