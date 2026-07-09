@@ -22,9 +22,14 @@ jest.mock(
 );
 
 // Import AFTER the mock so the lazy require inside loadHaptics sees the
-// throwing factory.
+// throwing factory. Also import the cache-reset helper so this file's null
+// cache doesn't leak into useHaptics.loaded.test.ts.
 // eslint-disable-next-line import/first
-import { useHaptics } from '../useHaptics';
+import { useHaptics, __resetHapticsCacheForTests } from '../useHaptics';
+
+beforeEach(() => {
+  __resetHapticsCacheForTests();
+});
 
 describe('useHaptics — graceful failure when expo-haptics is unavailable', () => {
   it('exposes 6 callable methods', () => {

@@ -3,8 +3,17 @@ import React from 'react';
 // --- Native-module mocks (must precede ProofDetail import) ---
 
 jest.mock('expo-av', () => {
+  const statusListeners: Array<(s: any) => void> = [];
   class Sound {
-    static createAsync = jest.fn(async () => ({ sound: new Sound() }));
+    static _instances: Sound[] = [];
+    static _createAsyncFactory: (uri: string) => Promise<{ sound: Sound }> =
+      async () => ({ sound: new Sound() });
+    static createAsync = jest.fn(async (source: any, _opts: any, cb?: any) => {
+      const s = new Sound();
+      if (cb) statusListeners.push(cb);
+      Sound._instances.push(s);
+      return Sound._createAsyncFactory(source);
+    });
     loadAsync = jest.fn(async () => undefined);
     unloadAsync = jest.fn(async () => undefined);
     playAsync = jest.fn(async () => undefined);
@@ -18,6 +27,15 @@ jest.mock('expo-av', () => {
       durationMillis: 1000,
       positionMillis: 0,
     }));
+    // test-only helper: fire a status event to every registered listener.
+    static _emitStatus(s: any): void {
+      for (const l of statusListeners) l(s);
+    }
+    static _reset(): void {
+      statusListeners.length = 0;
+      Sound._instances.length = 0;
+      Sound._createAsyncFactory = async () => ({ sound: new Sound() });
+    }
   }
   return {
     Audio: {
@@ -108,7 +126,7 @@ jest.mock('../../state/workStore', () => {
 
 // --- Imports (after mocks) ---
 
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { ProofDetail } from '../ProofDetail';
 
@@ -348,6 +366,102 @@ describe('ProofDetail', () => {
       // The failure must NOT navigate away.
       expect(nav.goBack).not.toHaveBeenCalled();
       alertSpy.mockRestore();
+    });
+  });
+
+  describe('AudioPlayer (useEffect + onToggle)', () => {
+    const { Audio } = require('expo-av') as {
+      Audio: {
+        Sound: {
+          createAsync: jest.Mock;
+          _emitStatus(s: any): void;
+          _reset(): void;
+          _createAsyncFactory: (uri: string) => Promise<unknown>;
+        };
+        setAudioModeAsync: jest.Mock;
+      };
+    };
+
+    beforeEach(() => {
+      Audio.Sound._reset();
+      Audio.Sound.createAsync.mockClear();
+      Audio.setAudioModeAsync.mockClear();
+    });
+
+    it("calls Audio.setAudioModeAsync + Sound.createAsync when mounting a record with audioUri", async () => {
+      renderProofDetail('rec-queued');
+      await waitFor(() => {
+        expect(Audio.setAudioModeAsync).toHaveBeenCalled();
+      });
+      await waitFor(() => {
+        expect(Audio.Sound.createAsync).toHaveBeenCalled();
+      });
+    });
+
+    it('status callback with isPlaying=true updates the toggle label to Pause', async () => {
+      const { getByLabelText } = renderProofDetail('rec-queued');
+      await waitFor(() => {
+        expect(Audio.Sound.createAsync).toHaveBeenCalled();
+      });
+      await new Promise((r) => setTimeout(r, 0));
+      await act(async () => {
+        Audio.Sound._emitStatus({
+          isLoaded: true,
+          isPlaying: true,
+          durationMillis: 2000,
+          positionMillis: 500,
+          didJustFinish: false,
+        });
+      });
+      expect(getByLabelText('Pause audio')).toBeTruthy();
+    });
+
+    it('didJustFinish status resets play state and progress to 0', async () => {
+      const { getByLabelText } = renderProofDetail('rec-queued');
+      await waitFor(() => {
+        expect(Audio.Sound.createAsync).toHaveBeenCalled();
+      });
+      await new Promise((r) => setTimeout(r, 0));
+      await act(async () => {
+        Audio.Sound._emitStatus({
+          isLoaded: true,
+          isPlaying: true,
+          durationMillis: 2000,
+          positionMillis: 2000,
+          didJustFinish: true,
+        });
+      });
+      expect(getByLabelText('Play audio')).toBeTruthy();
+    });
+
+    it('status callback with isLoaded=false is a no-op (no state update)', async () => {
+      const { getByLabelText } = renderProofDetail('rec-queued');
+      await waitFor(() => {
+        expect(Audio.Sound.createAsync).toHaveBeenCalled();
+      });
+      await new Promise((r) => setTimeout(r, 0));
+      await act(async () => {
+        Audio.Sound._emitStatus({ isLoaded: false });
+      });
+      expect(getByLabelText('Play audio')).toBeTruthy();
+    });
+
+    it("createAsync failure announces 'Audio failed to load' and disables the toggle", async () => {
+      Audio.Sound._createAsyncFactory = () =>
+        Promise.reject(new Error('load busted'));
+      const announceSpy = jest.spyOn(
+        require('react-native').AccessibilityInfo,
+        'announceForAccessibility',
+      );
+      const { getByLabelText } = renderProofDetail('rec-queued');
+      await waitFor(() => {
+        expect(announceSpy).toHaveBeenCalledWith('Audio failed to load');
+      });
+      const toggle = getByLabelText('Play audio');
+      expect(toggle.props.accessibilityState).toEqual(
+        expect.objectContaining({ disabled: true }),
+      );
+      announceSpy.mockRestore();
     });
   });
 });

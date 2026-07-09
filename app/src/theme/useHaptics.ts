@@ -39,6 +39,17 @@ type HapticsModule = {
 
 let cachedHaptics: HapticsModule | null | undefined;
 
+/**
+ * Test-only: clear the module-level require() cache so the next call to
+ * loadHaptics() re-evaluates require('expo-haptics'). Consumed by
+ * useHaptics.loaded.test.ts to avoid poisoning from the sibling
+ * useHaptics.test.ts (which mocks the module to throw and caches null).
+ * NOT for production use.
+ */
+export function __resetHapticsCacheForTests(): void {
+  cachedHaptics = undefined;
+}
+
 function loadHaptics(): HapticsModule | null {
   if (cachedHaptics !== undefined) {
     return cachedHaptics;
