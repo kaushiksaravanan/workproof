@@ -218,6 +218,14 @@ describe('Home', () => {
       await rc.props.onRefresh();
       expect(mockState.refresh).toHaveBeenCalled();
     });
+
+    it("'View all' link navigates to History", () => {
+      setMockState({ records: [makeRecord()] });
+      const { navigation, utils } = renderHome();
+      const link = utils.getByLabelText('View all your work');
+      fireEvent.press(link);
+      expect(navigation.navigate).toHaveBeenCalledWith('History');
+    });
   });
 
   describe('stats row', () => {
