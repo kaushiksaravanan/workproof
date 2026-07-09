@@ -45,7 +45,7 @@ jest.mock('../../services/hashing', () => ({
 jest.mock('uuid', () => ({ v4: () => 'test-uuid' }));
 jest.mock('react-native-get-random-values', () => ({}));
 
-import { isDirtyOf, parseAmountOrZero } from '../LogWork';
+import { isDirtyOf, parseAmountOrZero, buildDraftRecord } from '../LogWork';
 
 const empty = {
   workType: '',
@@ -184,5 +184,95 @@ describe('parseAmountOrZero — amount input coercion', () => {
 
   it('trims leading whitespace naturally via parseFloat', () => {
     expect(parseAmountOrZero('   500')).toBe(500);
+  });
+});
+
+describe('buildDraftRecord — canonical draft assembly', () => {
+  const baseArgs = {
+    id: 'test-id-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    fields: {
+      workType: 'plastering',
+      clientName: 'Sharma',
+      location: 'Andheri',
+      notes: 'finish tmrw',
+      workerName: 'Ravi Kumar',
+      amountReceived: 0,
+      amountPending: 0,
+    },
+    amountReceivedRaw: '5000',
+    amountPendingRaw: '2500',
+    photoUri: 'file:///doc/workproof/photo.jpg',
+    audioUri: 'file:///doc/workproof/audio.m4a' as string | undefined,
+    transcript: 'did the wall',
+  };
+
+  it('assembles the canonical shape with all fields present', () => {
+    const draft = buildDraftRecord(baseArgs);
+    expect(draft).toEqual({
+      id: 'test-id-1',
+      createdAt: '2026-01-01T00:00:00.000Z',
+      workerName: 'Ravi Kumar',
+      workType: 'plastering',
+      clientName: 'Sharma',
+      location: 'Andheri',
+      amountReceived: 5000,
+      amountPending: 2500,
+      notes: 'finish tmrw',
+      photoUri: 'file:///doc/workproof/photo.jpg',
+      audioUri: 'file:///doc/workproof/audio.m4a',
+      transcript: 'did the wall',
+      hash: '',
+    });
+  });
+
+  it('drops empty-string optionals via `|| undefined`', () => {
+    const draft = buildDraftRecord({
+      ...baseArgs,
+      fields: {
+        ...baseArgs.fields,
+        workerName: '',
+        clientName: '',
+        location: '',
+        notes: '',
+      },
+    });
+    expect(draft.workerName).toBeUndefined();
+    expect(draft.clientName).toBeUndefined();
+    expect(draft.location).toBeUndefined();
+    expect(draft.notes).toBeUndefined();
+    // workType is required — stays as-is even when empty.
+    expect(draft.workType).toBe('plastering');
+  });
+
+  it('sets audioUri to undefined when omitted', () => {
+    const draft = buildDraftRecord({ ...baseArgs, audioUri: undefined });
+    expect(draft.audioUri).toBeUndefined();
+    expect(draft.photoUri).toBe(baseArgs.photoUri);
+  });
+
+  it('runs amounts through parseAmountOrZero (empty → 0)', () => {
+    const draft = buildDraftRecord({
+      ...baseArgs,
+      amountReceivedRaw: '',
+      amountPendingRaw: '   ',
+    });
+    expect(draft.amountReceived).toBe(0);
+    expect(draft.amountPending).toBe(0);
+  });
+
+  it("hash field is always '' (caller merges the canonical hash in)", () => {
+    const draft = buildDraftRecord(baseArgs);
+    expect(draft.hash).toBe('');
+  });
+
+  it('preserves id + createdAt verbatim (no clock drift)', () => {
+    const draft = buildDraftRecord({
+      ...baseArgs,
+      id: 'stable-uuid',
+      createdAt: '2026-06-15T12:34:56.789Z',
+    });
+    expect(draft.id).toBe('stable-uuid');
+    expect(draft.createdAt).toBe('2026-06-15T12:34:56.789Z');
   });
 });

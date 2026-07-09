@@ -124,9 +124,42 @@ function parseAmountOrZero(raw: string): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Build a persistable WorkRecord draft from review-form input. Pure — the
+ * caller is responsible for supplying already-persisted photo/audio URIs
+ * and a fresh id + timestamp. The `hash` field is intentionally empty; the
+ * canonical hash is computed after this returns and merged in by onSave.
+ */
+function buildDraftRecord(args: {
+  id: string;
+  createdAt: string;
+  fields: ReviewFields;
+  amountReceivedRaw: string;
+  amountPendingRaw: string;
+  photoUri: string;
+  audioUri: string | undefined;
+  transcript: string;
+}): WorkRecord {
+  return {
+    id: args.id,
+    createdAt: args.createdAt,
+    workerName: args.fields.workerName || undefined,
+    workType: args.fields.workType,
+    clientName: args.fields.clientName || undefined,
+    location: args.fields.location || undefined,
+    amountReceived: parseAmountOrZero(args.amountReceivedRaw),
+    amountPending: parseAmountOrZero(args.amountPendingRaw),
+    notes: args.fields.notes || undefined,
+    photoUri: args.photoUri,
+    audioUri: args.audioUri,
+    transcript: args.transcript,
+    hash: '',
+  };
+}
+
 // Exported for unit testing; also re-usable by any future screen that needs
 // mm:ss timer formatting or the dirty-guard predicate.
-export { formatTimer, isDirtyOf, parseAmountOrZero };
+export { formatTimer, isDirtyOf, parseAmountOrZero, buildDraftRecord };
 
 interface RoundRecordButtonProps {
   isRecording: boolean;
@@ -735,27 +768,16 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
         : undefined;
       const id = uuidv4();
       const createdAt = new Date().toISOString();
-      const parsedAmountReceived = parseAmountOrZero(amountReceivedRaw);
-      const parsedAmountPending = parseAmountOrZero(amountPendingRaw);
-      const draft: WorkRecord = {
+      const draft = buildDraftRecord({
         id,
         createdAt,
-        workerName: fields.workerName || undefined,
-        workType: fields.workType,
-        clientName: fields.clientName || undefined,
-        location: fields.location || undefined,
-        amountReceived: Number.isFinite(parsedAmountReceived)
-          ? parsedAmountReceived
-          : 0,
-        amountPending: Number.isFinite(parsedAmountPending)
-          ? parsedAmountPending
-          : 0,
-        notes: fields.notes || undefined,
+        fields,
+        amountReceivedRaw,
+        amountPendingRaw,
         photoUri: persistedPhotoUri,
         audioUri: persistedAudioUri,
         transcript,
-        hash: '',
-      };
+      });
       const hash = await hashRecord(draft, photoBytes, audioBytes);
       if (!mountedRef.current) return;
       const finalRecord: WorkRecord = { ...draft, hash };
