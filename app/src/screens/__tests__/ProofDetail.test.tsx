@@ -200,6 +200,25 @@ describe('ProofDetail', () => {
     expect(getByText('ANCHORED')).toBeTruthy();
   });
 
+  it("shows 'No photo' placeholder when photoUri is empty (web-created record)", () => {
+    // Web builds can produce records without a photo (camera is a no-op on
+    // web). Render one such record and verify the placeholder is shown.
+    const noPhotoRec: WorkRecord = {
+      ...pendingRec,
+      id: 'rec-nophoto',
+      photoUri: '',
+    };
+    mockState = {
+      records: [noPhotoRec],
+      setAnchored: jest.fn(),
+      remove: jest.fn(),
+    };
+    const { getByLabelText, queryByLabelText } = renderProofDetail('rec-nophoto');
+    expect(getByLabelText('No photo captured for this proof')).toBeTruthy();
+    // The real photo Image (labelled "Work photo") must not be present.
+    expect(queryByLabelText('Work photo')).toBeNull();
+  });
+
   it("pending record shows the 'Not yet anchored' chip and no badge", () => {
     const { getByText, queryByText } = renderProofDetail('rec-pending');
     expect(getByText('Not yet anchored')).toBeTruthy();

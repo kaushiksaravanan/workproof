@@ -316,6 +316,18 @@ export function ProofDetail({
           borderRadius: theme.radii.sm,
           backgroundColor: theme.colors.hairline,
         },
+        photoPlaceholder: {
+          width: '100%',
+          aspectRatio: 16 / 9,
+          borderRadius: theme.radii.sm,
+          backgroundColor: theme.colors.hairline,
+          alignItems: 'center',
+          justifyContent: 'center',
+        },
+        photoPlaceholderText: {
+          ...theme.typography.label,
+          color: theme.colors.mutedForeground,
+        },
         transcript: {
           ...theme.typography.body,
           color: theme.colors.peggyInk,
@@ -486,12 +498,22 @@ export function ProofDetail({
       {/* 1. Photo */}
       <View style={styles.section}>
         <Card variant="standard">
-          <Image
-            source={{ uri: record.photoUri }}
-            style={styles.photo}
-            accessibilityIgnoresInvertColors
-            accessibilityLabel="Work photo"
-          />
+          {record.photoUri ? (
+            <Image
+              source={{ uri: record.photoUri }}
+              style={styles.photo}
+              accessibilityIgnoresInvertColors
+              accessibilityLabel="Work photo"
+            />
+          ) : (
+            <View
+              style={styles.photoPlaceholder}
+              accessible
+              accessibilityLabel="No photo captured for this proof"
+            >
+              <Text style={styles.photoPlaceholderText}>No photo</Text>
+            </View>
+          )}
         </Card>
       </View>
 
