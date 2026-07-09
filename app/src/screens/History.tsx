@@ -54,6 +54,10 @@ function isHistoryFilter(value: string): value is HistoryFilter {
   return (FILTER_KEYS as readonly string[]).includes(value);
 }
 
+// Exported for unit testing (the SegmentedTabs onChange contract is
+// already enforced by our own tabs but a defensive test locks the shape).
+export { isHistoryFilter };
+
 export interface HistoryProps {
   onOpenProof: (record: WorkRecord) => void;
 }

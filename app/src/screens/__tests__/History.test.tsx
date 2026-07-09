@@ -234,3 +234,23 @@ describe('History screen', () => {
     expect(rc2.props.refreshing).toBe(true);
   });
 });
+
+describe('isHistoryFilter — filter-key type guard', () => {
+  const { isHistoryFilter } = require('../History') as {
+    isHistoryFilter: (v: string) => boolean;
+  };
+
+  it.each(['all', 'pending', 'anchored'])(
+    "returns true for the canonical filter '%s'",
+    (key) => {
+      expect(isHistoryFilter(key)).toBe(true);
+    },
+  );
+
+  it.each(['ALL', 'Pending', ' anchored ', 'archived', '', '__proto__'])(
+    "returns false for the unknown value %j",
+    (key) => {
+      expect(isHistoryFilter(key as string)).toBe(false);
+    },
+  );
+});
