@@ -70,7 +70,7 @@ interface EmptyStateCopy {
 const EMPTY_COPY: Record<HistoryFilter, EmptyStateCopy> = {
   all: {
     title: 'No proofs yet',
-    body: 'Record your first job and it lands here, signed and ready.',
+    body: 'Record your first job and it lands here, hashed and ready to share.',
   },
   pending: {
     title: 'Nothing pending',
@@ -321,7 +321,7 @@ export function History({ onOpenProof }: HistoryProps): React.ReactElement {
           </Text>
           <MarkerUnderline text="work" style={styles.title} />
         </View>
-        <Text style={styles.subhead}>Every job, signed and saved.</Text>
+        <Text style={styles.subhead}>Every job, hashed and saved.</Text>
       </View>
       <View style={styles.tabsWrap}>
         <SegmentedTabs

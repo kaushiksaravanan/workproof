@@ -149,7 +149,7 @@ describe('History screen', () => {
     // EMPTY_COPY.all.title
     expect(getByText('No proofs yet')).toBeTruthy();
     expect(
-      getByText('Record your first job and it lands here, signed and ready.'),
+      getByText('Record your first job and it lands here, hashed and ready to share.'),
     ).toBeTruthy();
     // The pre-hydration loading copy must NOT be visible.
     expect(queryByText('Loading your proofs…')).toBeNull();
