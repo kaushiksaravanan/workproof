@@ -16,6 +16,7 @@
     },
     "web": {
       "bundler": "metro",
+      "favicon": "./src/assets/favicon.png",
       "name": "WorkProof",
       "shortName": "WorkProof",
       "description": "Field-ready proof-of-work capture — photo + voice + GPS to signed PDF, anchored to Polygon Amoy.",
