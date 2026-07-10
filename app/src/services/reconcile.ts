@@ -1,4 +1,5 @@
 import type { WorkRecord, AnchorResult } from '../types';
+import { makeQueuedTxId } from '../utils/record';
 
 /**
  * After `flushQueue()` drains the offline anchor queue, walk each successful
@@ -11,7 +12,7 @@ import type { WorkRecord, AnchorResult } from '../types';
  *
  * A record is considered "queued for this hashHex" if BOTH:
  *   - record.hash === hashHex             (we know which record it is)
- *   - record.anchorTxHash === `queued:` + hashHex   (it was actually queued)
+ *   - record.anchorTxHash === makeQueuedTxId(hashHex)  (it was actually queued)
  * The double-match protects against a rare case where two records happen to
  * share a hash but only one was queued for anchoring.
  *
@@ -28,9 +29,9 @@ export async function reconcileAnchoredHashes(
   ) => Promise<void>,
 ): Promise<void> {
   for (const { hashHex, result } of results) {
+    const queuedTxId = makeQueuedTxId(hashHex);
     const queuedRecords = records.filter(
-      (r) =>
-        r.hash === hashHex && r.anchorTxHash === `queued:${hashHex}`,
+      (r) => r.hash === hashHex && r.anchorTxHash === queuedTxId,
     );
     for (const r of queuedRecords) {
       try {

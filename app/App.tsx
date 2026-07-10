@@ -15,6 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useAppFonts, colors, defaultTheme } from './src/theme';
 import type { RootStackParamList } from './src/navigation/types';
 import type { AnchorResult } from './src/types';
+import { makeQueuedTxId } from './src/utils/record';
 import { Onboarding } from './src/screens/Onboarding';
 import { Home } from './src/screens/Home';
 import { LogWork } from './src/screens/LogWork';
@@ -101,7 +102,7 @@ export default function App(): React.ReactElement {
           const setAnchored = useWorkStore.getState().setAnchored;
           const queuedRecords = records.filter(
             (r) =>
-              r.hash === hashHex && r.anchorTxHash === `queued:${hashHex}`,
+              r.hash === hashHex && r.anchorTxHash === makeQueuedTxId(hashHex),
           );
           for (const r of queuedRecords) {
             // Let any setAnchored throw propagate — flushQueue will catch it

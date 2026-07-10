@@ -17,6 +17,7 @@ import { JsonRpcProvider, Wallet, Contract, getBytes } from "ethers";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { AnchorResult, AnchorStatus } from "../types";
+import { QUEUED_TX_PREFIX, makeQueuedTxId } from "../utils/record";
 import {
   POLYGON_AMOY_RPC,
   POLYGON_AMOY_CHAIN_ID,
@@ -164,7 +165,7 @@ export async function anchorHash(hashHex: string): Promise<AnchorResult> {
   if (!ANCHOR_CONTRACT_ADDRESS || !HACKATHON_DEMO_KEY) {
     await enqueueHash(hashHex);
     return {
-      txHash: `queued:${hashHex}`,
+      txHash: makeQueuedTxId(hashHex),
       chainId: POLYGON_AMOY_CHAIN_ID,
       explorerUrl: "",
     };
@@ -176,7 +177,7 @@ export async function anchorHash(hashHex: string): Promise<AnchorResult> {
     // the UI can render "queued" state. flushQueue will retry later.
     await enqueueHash(hashHex);
     return {
-      txHash: `queued:${hashHex}`,
+      txHash: makeQueuedTxId(hashHex),
       chainId: POLYGON_AMOY_CHAIN_ID,
       explorerUrl: "",
     };
@@ -190,7 +191,7 @@ export async function anchorHash(hashHex: string): Promise<AnchorResult> {
  * still null, and "confirmed" / "failed" once mined.
  */
 export async function getAnchorStatus(txHash: string): Promise<AnchorStatus> {
-  if (txHash.startsWith("queued:")) {
+  if (txHash.startsWith(QUEUED_TX_PREFIX)) {
     return "queued";
   }
   const receipt = await provider().getTransactionReceipt(txHash);

@@ -26,7 +26,7 @@ import { anchorHash, explorerUrl } from '../services/anchor';
 import { generateProofPdf, shareProofPdf } from '../services/proof';
 import type { RootStackParamList } from '../navigation/types';
 import type { WorkRecord } from '../types';
-import { isAnchored, isQueuedAnchor, chunkHash } from '../utils/record';
+import { isAnchored, isQueuedAnchor, chunkHash, QUEUED_TX_PREFIX } from '../utils/record';
 
 /**
  * ProofDetail — full read of a single saved WorkRecord.
@@ -65,7 +65,7 @@ function formatField(value: string | number | undefined): string {
 }
 
 function isQueuedTx(txHash: string): boolean {
-  return txHash.startsWith('queued:');
+  return txHash.startsWith(QUEUED_TX_PREFIX);
 }
 
 interface AudioPlayerProps {

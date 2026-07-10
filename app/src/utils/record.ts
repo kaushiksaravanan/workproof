@@ -7,6 +7,22 @@ import type { WorkRecord } from '../types';
  */
 
 /**
+ * Prefix used to synthesize a "queued" tx id when a proof was submitted
+ * offline (anchorHash → enqueueHash). Anything with this prefix is a
+ * placeholder that flushQueue will replace once the on-chain anchor lands.
+ *
+ * Consumers (anchor.ts producers, ProofDetail's isQueuedTx, reconcile.ts's
+ * filter, App.tsx's drainQueueAndReconcile) all reference this constant so
+ * a format change here propagates everywhere instead of silently drifting.
+ */
+export const QUEUED_TX_PREFIX = 'queued:';
+
+/** Build the synthetic queued tx id for a given record hash. */
+export function makeQueuedTxId(hashHex: string): string {
+  return `${QUEUED_TX_PREFIX}${hashHex}`;
+}
+
+/**
  * A record is anchored only when both the tx hash AND the chain id are
  * recorded AND the tx hash is a real on-chain hash (not the synthetic
  * `queued:<hash>` placeholder that anchorHash returns when offline).
@@ -15,7 +31,7 @@ export function isAnchored(record: WorkRecord): boolean {
   return Boolean(
     record.anchorTxHash &&
       record.anchorChainId &&
-      !record.anchorTxHash.startsWith('queued:'),
+      !record.anchorTxHash.startsWith(QUEUED_TX_PREFIX),
   );
 }
 
@@ -25,7 +41,7 @@ export function isAnchored(record: WorkRecord): boolean {
  */
 export function isQueuedAnchor(record: WorkRecord): boolean {
   return Boolean(
-    record.anchorTxHash && record.anchorTxHash.startsWith('queued:'),
+    record.anchorTxHash && record.anchorTxHash.startsWith(QUEUED_TX_PREFIX),
   );
 }
 
