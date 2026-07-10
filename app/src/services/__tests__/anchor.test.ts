@@ -330,4 +330,34 @@ describe('flushQueue', () => {
     expect(results).toHaveLength(1);
     expect(await getQueue()).toEqual(['not-a-valid-hash']);
   });
+
+  it('merge-dedupes: a failed hash re-queued during the network window does not double-list', async () => {
+    // Simulate the race: flushQueue takes a snapshot of [validHash], tries
+    // to anchor it (fails). While that's happening, anchorHash(validHash)
+    // is called again from the UI ('Retry anchor' tap), which enqueues
+    // validHash into the now-empty queue → current queue = [validHash].
+    // flushQueue's merge step must dedupe so the queue doesn't end up as
+    // [validHash, validHash].
+    mockConfigured = true;
+    mockAnchorImpl = async () => {
+      // Simulate a re-enqueue during the network window. Directly writing
+      // through the storage layer is the simplest way to model 'another
+      // caller enqueued while we were awaiting the tx'.
+      await AsyncStorage.setItem(
+        '@workproof/anchor-queue',
+        JSON.stringify([validHash]),
+      );
+      throw new Error('rpc dropped');
+    };
+    await AsyncStorage.setItem(
+      '@workproof/anchor-queue',
+      JSON.stringify([validHash]),
+    );
+    const { flushQueue, getQueue } = importAnchor();
+    const results = await flushQueue();
+    expect(results).toEqual([]);
+    // The naive `[...failed, ...current]` would have produced
+    // [validHash, validHash]; the dedup step collapses it to one.
+    expect(await getQueue()).toEqual([validHash]);
+  });
 });

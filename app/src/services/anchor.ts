@@ -247,9 +247,21 @@ export async function flushQueue(): Promise<
   }
 
   // Merge failures with anything queued during the network window above.
+  // Dedupe: `current` was populated via enqueueHash's dedup guard, but if the
+  // same record's hash appears in BOTH `failed` (from the snapshot we drained)
+  // AND `current` (freshly enqueued during the network wait), the naive
+  // concat would resurrect a duplicate.
   await withQueueLock(async () => {
     const current = await getQueue();
-    await setQueue([...failed, ...current]);
+    const merged = [...failed, ...current];
+    const seen = new Set<string>();
+    const deduped: string[] = [];
+    for (const h of merged) {
+      if (seen.has(h)) continue;
+      seen.add(h);
+      deduped.push(h);
+    }
+    await setQueue(deduped);
   });
 
   return results;
