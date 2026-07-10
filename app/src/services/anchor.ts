@@ -111,10 +111,14 @@ async function setQueue(queue: string[]): Promise<void> {
   await AsyncStorage.setItem(ANCHOR_QUEUE_KEY, JSON.stringify(queue));
 }
 
-/** Append a hash to the offline queue (atomic via mutex). */
+/** Append a hash to the offline queue (atomic via mutex, deduped). */
 async function enqueueHash(hashHex: string): Promise<void> {
   await withQueueLock(async () => {
     const queue = await getQueue();
+    // Skip if already queued — otherwise a double-tap on 'Retry anchor'
+    // would submit the same hash twice (gas waste on mainnet; harmless on
+    // testnet but still worth avoiding).
+    if (queue.includes(hashHex)) return;
     queue.push(hashHex);
     await setQueue(queue);
   });

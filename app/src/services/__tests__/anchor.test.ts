@@ -136,6 +136,18 @@ describe('anchorHash — config-missing → queue-only mode', () => {
     await anchorHash(anotherHash);
     expect(await getQueue()).toEqual([validHash, anotherHash]);
   });
+
+  it('deduplicates: re-anchoring the same hash does not grow the queue', async () => {
+    // Repro: user taps 'Retry anchor' twice while offline, or LogWork
+    // triggers anchor twice for the same record. The queue must not
+    // acquire duplicates — otherwise flushQueue would submit the same
+    // hash twice, wasting gas on mainnet.
+    const { anchorHash, getQueue } = importAnchor();
+    await anchorHash(validHash);
+    await anchorHash(validHash);
+    await anchorHash(validHash);
+    expect(await getQueue()).toEqual([validHash]);
+  });
 });
 
 describe('anchorHash — configured, on-chain success', () => {
