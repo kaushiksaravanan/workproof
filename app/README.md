@@ -52,7 +52,7 @@ If you accidentally tap "Deny", clear permissions in **Settings → Apps → Exp
 
 The mobile app does not require any environment variables to run the demo. Everything is on-device.
 
-For LLM-backed field extraction (`services/llm.ts`), the app can vend Gemini keys from CipherStack. Copy `.env.example` to `.env` and fill in:
+For LLM-backed field extraction (`services/llm.ts`), the code can vend Gemini keys from CipherStack. **This path is present but not wired to any user action in the shipping app** — `LogWork.tsx` hard-codes `online: false` on the extraction call so the regex baseline runs instead. If you want to experiment with the Gemini path, remove that flag and copy `.env.example` to `.env` with:
 
 ```bash
 EXPO_PUBLIC_CIPHERSTACK_TOKEN=csk_your_service_token_here
