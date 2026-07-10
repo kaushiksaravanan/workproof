@@ -116,7 +116,7 @@ This is the tour you give a stakeholder. It hits every primitive without dwellin
 2. **0:10 — Tap "Log today's work".** The capture screen takes over. Camera preview is live.
 3. **0:15 — Take the photo.** Big shutter. One tap. Photo locks into the bundle and the screen flips to the voice-memo step.
 4. **0:25 — Record the voice memo.** Hold-to-record. Say something like "Replaced the kitchen sink trap, ran water for two minutes, no leaks." Release to stop. The waveform settles.
-5. **0:40 — Type the short transcript.** The review step in `LogWork` shows the editable transcript on the notebook-paper surface. Type (or paste) the report; optionally tap Extract for the Gemini-assisted fill. Edit inline to fix a job number or customer name.
+5. **0:40 — Type the short transcript.** The review step in `LogWork` shows the editable transcript on the notebook-paper surface. Type (or paste) the report and tap Use this — the regex extractor fills work type / client / amounts from known patterns. Edit inline to fix a job number or customer name.
 6. **0:55 — Save the proof.** Tap "Save proof". Under the hood, `expo-crypto` SHA-256 hashes the canonical record (fields + photo hash + audio hash). If an anchor contract address is configured, the hash is submitted to Polygon Amoy via ethers.js — the demo wallet signs the tx.
 7. **1:10 — Export the PDF.** `expo-print` renders a one-pager with the photo, transcript, location, content hash, and (if anchored) a Polygonscan link to the anchor tx. Tap **Share**.
 8. **1:25 — Send via WhatsApp / email.** The native share sheet opens. Pick a contact. The PDF lands on the homeowner's phone within seconds.

@@ -654,8 +654,8 @@
       </div>
       <div class="node llm">
         <div class="icon">AI</div>
-        <h3>Gemini (optional)</h3>
-        <p>Extractor pulls work-type / client / amounts from the typed transcript. Vended via CipherStack through the /api/vend serverless proxy; regex baseline works fully offline.</p>
+        <h3>Regex extractor</h3>
+        <p>On-device pattern match pulls work-type / client / amounts from the typed transcript. Runs fully offline. (Gemini path exists in code via CipherStack + /api/vend proxy but is not wired to any user action in the shipping app.)</p>
       </div>
       <div class="arch-arrow">
         <svg viewBox="0 0 44 24" fill="none" stroke="#001A33" stroke-width="2.5" stroke-linecap="round">
@@ -696,7 +696,7 @@
       <div class="why-card offline">
         <span class="badge">offline-first</span>
         <h3>Privacy by construction</h3>
-        <p>Raw evidence — photo bytes, audio bytes — never leaves the phone. Only the SHA-256 hash goes on-chain. Optional Gemini extraction sees the typed transcript, not the media.</p>
+        <p>Raw evidence — photo bytes, audio bytes — never leaves the phone. Only the SHA-256 hash goes on-chain. Extraction is on-device regex today (the Gemini path exists but is disabled in the shipping app for privacy).</p>
       </div>
       <div class="why-card crypto">
         <span class="badge">cryptographic</span>

@@ -15,7 +15,7 @@ Field-ready proof-of-work capture for crews and contractors. Snap a photo, recor
 WorkProof turns a 30-second site walkthrough into a tamper-evident record:
 
 - **Photo + voice + location** captured in a single flow.
-- **Audio + editable transcript** — the voice memo is the reference; the crew types the short report in an editable transcript field. Optional Gemini extraction pulls work type / client / amounts from the text.
+- **Audio + editable transcript** — the voice memo is the reference; the crew types the short report in an editable transcript field. An on-device regex extractor pulls work type / client / amounts from that text.
 - **Canonical SHA-256 hash** binds the bundle (fields + photo bytes + audio bytes) so tampering is detectable. The demo wallet (ethers.js) submits that hash to Polygon Amoy for a permanent timestamp.
 - **PDF export + share sheet** so the proof leaves the device through whatever channel the crew already uses (WhatsApp, email, SMS).
 

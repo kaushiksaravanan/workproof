@@ -260,7 +260,7 @@
         <p class="lead">A 30-second capture flow on the crew's phone that turns each finished job into a hashed, anchored, portable proof.</p>
         <ul>
           <li>Photo + voice memo + location + timestamp, captured in one flow.</li>
-          <li>Editable transcript on-device — no cloud upload of raw audio. Optional Gemini pulls work type / client / amounts from what the crew types.</li>
+          <li>Editable transcript on-device — no cloud upload of raw audio. Regex extractor pulls work type / client / amounts from the typed text (offline-first; the Gemini path exists in code but is currently disabled in the app for privacy).</li>
           <li>The bundle is SHA-256 hashed (canonical record + photo bytes + audio bytes); the hash is anchored on Polygon Amoy via ethers.js for permanent timestamping.</li>
           <li>Exported as a one-page PDF with the content hash + Polygonscan link — travels through WhatsApp, email, SMS.</li>
         </ul>
