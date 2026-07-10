@@ -112,8 +112,8 @@ If you also want to preview the app in Expo Go on a phone, the installed Expo Go
 
 This is the tour you give a stakeholder. It hits every primitive without dwelling.
 
-1. **0:00 — Open the app.** Cold-start lands on the home screen with the marker-underline title and the "New proof" CTA. Mention the brand: paper, ink, Fraunces + Plus Jakarta Sans.
-2. **0:10 — Tap "New proof".** The capture screen takes over. Camera preview is live.
+1. **0:00 — Open the app.** After the 3-slide Onboarding (skipped on second boot), the Home screen appears with the marker-underline "Today" title and the "Log today's work" CTA (or "Start your first proof" on the empty state). Mention the brand: paper, ink, Fraunces + Plus Jakarta Sans.
+2. **0:10 — Tap "Log today's work".** The capture screen takes over. Camera preview is live.
 3. **0:15 — Take the photo.** Big shutter. One tap. Photo locks into the bundle and the screen flips to the voice-memo step.
 4. **0:25 — Record the voice memo.** Hold-to-record. Say something like "Replaced the kitchen sink trap, ran water for two minutes, no leaks." Release to stop. The waveform settles.
 5. **0:40 — Watch the transcription.** `TranscriptScreen` shows the recognized text on the notebook-paper surface. Edit inline if needed — the crew often fixes a job number or a customer name here.
