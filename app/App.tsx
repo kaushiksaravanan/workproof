@@ -21,7 +21,6 @@ import { LogWork } from './src/screens/LogWork';
 import { ProofDetail } from './src/screens/ProofDetail';
 import { History } from './src/screens/History';
 import { flushQueue } from './src/services/anchor';
-import { reconcileAnchoredHashes } from './src/services/reconcile';
 import { useWorkStore } from './src/state/workStore';
 
 /**
@@ -86,13 +85,29 @@ export default function App(): React.ReactElement {
         // This closes the "anchored on-chain but stuck as queued locally"
         // divergence that would otherwise happen if the OS killed the app
         // between flushQueue returning and the reconcile step running.
+        //
+        // Note: we call setAnchored directly rather than routing through
+        // reconcileAnchoredHashes here. reconcileAnchoredHashes silently
+        // swallows per-record setAnchored failures, which is the right
+        // behavior for a batch call but the wrong signal for the flushQueue
+        // callback (flushQueue needs the throw to keep the hash queued for
+        // retry). So we duplicate the queued-record filter here and let
+        // errors propagate.
         const reconcile = async (
           hashHex: string,
           result: AnchorResult,
         ): Promise<void> => {
           const records = useWorkStore.getState().records;
           const setAnchored = useWorkStore.getState().setAnchored;
-          await reconcileAnchoredHashes([{ hashHex, result }], records, setAnchored);
+          const queuedRecords = records.filter(
+            (r) =>
+              r.hash === hashHex && r.anchorTxHash === `queued:${hashHex}`,
+          );
+          for (const r of queuedRecords) {
+            // Let any setAnchored throw propagate — flushQueue will catch it
+            // and keep the hash in the queue for a retry.
+            await setAnchored(r.id, result.txHash, result.chainId);
+          }
         };
         await flushQueue(reconcile);
       } catch {

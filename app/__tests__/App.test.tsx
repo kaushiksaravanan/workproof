@@ -47,10 +47,6 @@ jest.mock('../src/services/anchor', () => ({
   flushQueue: jest.fn(async () => []),
 }));
 
-jest.mock('../src/services/reconcile', () => ({
-  reconcileAnchoredHashes: jest.fn(async () => undefined),
-}));
-
 jest.mock('../src/state/workStore', () => {
   const state = {
     records: [],
