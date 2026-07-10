@@ -390,6 +390,61 @@ export async function extractWorkFields(
   return mergeBaseline(baseline, llm);
 }
 
+/**
+ * Translate a transcript from any source language to a named target
+ * language via Gemini. Returns null on any failure so the caller can
+ * gracefully fall back to the original transcript.
+ *
+ * Impact-in-India angle: many field crews dictate their voice memos in
+ * Kannada / Tamil / Hindi / Marathi / Bengali but clients (property
+ * managers, insurance adjusters, remote homeowners) often want the PDF
+ * in English or another common language. This gives WorkProof a
+ * cross-language proof-of-work story without forcing the crew to write
+ * in a language they don't speak.
+ *
+ * Currently uses the same gemini-1.5-flash model the extractor uses.
+ * On hackathon day this switches to `gemini-3.5-live-translate-preview`
+ * once the day-of credentials are provisioned — see
+ * https://ai.google.dev/gemini-api/docs/live-translate.
+ */
+export async function translateTranscript(
+  transcript: string,
+  targetLanguage: string,
+): Promise<string | null> {
+  const trimmed = transcript.trim();
+  if (!trimmed) return null;
+  const target = targetLanguage.trim();
+  if (!target) return null;
+
+  const vended = await vendGeminiKey();
+  if (!vended) return null;
+
+  const prompt = `Translate this worker's spoken work log into ${target}. Preserve numbers, names, and any technical terms exactly (do not localize proper nouns like "Sharma Construction"). Return ONLY the translated text — no quotes, no commentary, no prefix like "Translation:".\n\nOriginal:\n${trimmed}`;
+
+  try {
+    const url = `${vended.baseUrl.replace(/\/$/, "")}/models/gemini-1.5-flash:generateContent?key=${vended.key}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0 },
+      }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      candidates?: Array<{
+        content?: { parts?: Array<{ text?: string }> };
+      }>;
+    };
+    const text = json.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return null;
+    return text.trim();
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Inline fixtures — sanity checks run only in dev. They exercise the regex
 // path (no network) and the parseAmount helper.

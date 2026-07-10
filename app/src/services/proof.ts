@@ -371,6 +371,17 @@ export function buildProofHtml(rec: WorkRecord): string {
     <div class="transcript">${escapeHtml(rec.transcript) || "—"}</div>
 
     ${
+      rec.transcriptTranslation
+        ? `<div class="section-title">Translation${
+            rec.transcriptTranslationLanguage
+              ? ` (${escapeHtml(rec.transcriptTranslationLanguage)})`
+              : ""
+          }</div>
+    <div class="transcript">${escapeHtml(rec.transcriptTranslation)}</div>`
+        : ""
+    }
+
+    ${
       photoSrc
         ? `<div class="section-title">Photo</div>
     <div class="photo-wrap">

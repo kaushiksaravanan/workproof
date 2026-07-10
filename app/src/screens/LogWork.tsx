@@ -40,7 +40,7 @@ import {
 import { useTheme } from '../theme/ThemeProvider';
 import { useReducedMotion } from '../theme/useReducedMotion';
 import { useWorkStore } from '../state/workStore';
-import { extractWorkFields } from '../services/llm';
+import { extractWorkFields, translateTranscript } from '../services/llm';
 import { hashRecord } from '../services/hashing';
 import {
   getOrCreateWallet,
@@ -146,6 +146,8 @@ function buildDraftRecord(args: {
   audioUri: string | undefined;
   transcript: string;
   workerAddress: string;
+  transcriptTranslation?: string;
+  transcriptTranslationLanguage?: string;
 }): WorkRecord {
   return {
     id: args.id,
@@ -161,6 +163,9 @@ function buildDraftRecord(args: {
     photoUri: args.photoUri,
     audioUri: args.audioUri,
     transcript: args.transcript,
+    transcriptTranslation: args.transcriptTranslation || undefined,
+    transcriptTranslationLanguage:
+      args.transcriptTranslationLanguage || undefined,
     hash: '',
   };
 }
@@ -433,6 +438,15 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
   const [amountReceivedRaw, setAmountReceivedRaw] = useState('');
   const [amountPendingRaw, setAmountPendingRaw] = useState('');
   const [extractError, setExtractError] = useState<string | null>(null);
+
+  // Translation (Idea 1: cross-language proof-of-work). The crew types
+  // or dictates in their language; a Gemini call fills this in from the
+  // review step. Default target is English since it's the common
+  // lingua franca for absentee clients in India.
+  const [transcriptTranslation, setTranscriptTranslation] = useState('');
+  const [translationLanguage, setTranslationLanguage] = useState('English');
+  const [translating, setTranslating] = useState(false);
+  const [translateError, setTranslateError] = useState<string | null>(null);
 
   // Animations: pulsing ring around record button + save swoosh
   const pulse = useRef(new Animated.Value(0)).current;
@@ -727,9 +741,13 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
     setPhase('extracting');
     setExtractError(null);
     try {
-      // Spec: extraction is on-device. Force the regex baseline so we don't
-      // post the worker's transcript to a remote LLM (privacy + offline).
-      const extracted = await extractWorkFields(transcript, { online: false });
+      // Try the Gemini-augmented path first (via /api/vend proxy — the
+      // CipherStack token stays server-side, so no client-side secret).
+      // Falls back to the regex baseline if the network is offline, the
+      // proxy is unreachable, or Gemini's JSON is malformed. Either way
+      // the extractor returns a full ExtractedFields object; empty
+      // fields simply don't overwrite the user's existing edits.
+      const extracted = await extractWorkFields(transcript, { online: true });
       if (!mountedRef.current) return;
       // Only merge non-empty extracted values so a re-extract from the
       // photo step doesn't blow away user edits with empty regex output.
@@ -761,6 +779,36 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
     if (!mountedRef.current) return;
     setPhase('review');
   }, [transcript]);
+
+  const onTranslate = useCallback(async () => {
+    if (translating) return;
+    if (!transcript.trim() || !translationLanguage.trim()) return;
+    setTranslating(true);
+    setTranslateError(null);
+    try {
+      const result = await translateTranscript(
+        transcript,
+        translationLanguage,
+      );
+      if (!mountedRef.current) return;
+      if (!result) {
+        setTranslateError(
+          'Translation is offline right now. You can still save the proof and share it — the client will just see the original transcript.',
+        );
+        return;
+      }
+      setTranscriptTranslation(result);
+      AccessibilityInfo.announceForAccessibility('Translation ready');
+    } catch {
+      if (mountedRef.current) {
+        setTranslateError(
+          'Translation is offline right now. You can still save the proof and share it — the client will just see the original transcript.',
+        );
+      }
+    } finally {
+      if (mountedRef.current) setTranslating(false);
+    }
+  }, [translating, transcript, translationLanguage]);
 
   const onSave = useCallback(async () => {
     if (!photoUri) return;
@@ -811,6 +859,10 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
         audioUri: persistedAudioUri,
         transcript,
         workerAddress: workerWallet.address,
+        transcriptTranslation: transcriptTranslation.trim() || undefined,
+        transcriptTranslationLanguage: transcriptTranslation.trim()
+          ? translationLanguage
+          : undefined,
       });
       const hash = await hashRecord(draft, photoBytes, audioBytes);
       if (!mountedRef.current) return;
@@ -941,6 +993,16 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
           color: theme.colors.peggyInk,
           marginTop: theme.spacing.md,
           textAlign: 'center',
+        },
+        helperLeft: {
+          ...theme.typography.body,
+          color: theme.colors.peggyInk,
+          marginTop: theme.spacing.xs,
+        },
+        fieldLabelInline: {
+          ...theme.typography.formLabel,
+          color: theme.colors.peggyInk,
+          marginBottom: theme.spacing.xs,
         },
         textArea: {
           ...theme.typography.body,
@@ -1298,6 +1360,59 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
         multiline
         accessibilityHint="Multi-line notes about the work."
       />
+
+      {/* Translation section — Gemini-backed. Optional; produces a
+          bilingual PDF where the crew's original transcript sits
+          alongside the translated version for absentee/remote clients. */}
+      <View style={{ marginTop: theme.spacing.base }}>
+        <Text style={styles.fieldLabelInline} accessibilityRole="header">
+          Translate transcript (optional)
+        </Text>
+        <Text style={[styles.helperLeft, { marginBottom: theme.spacing.sm }]}>
+          Add a translated version of your transcript for a client who reads a different language. Both appear on the shared PDF.
+        </Text>
+        <View style={styles.actions}>
+          <View style={styles.actionFlex}>
+            <Field
+              label="Target language"
+              value={translationLanguage}
+              onChangeText={setTranslationLanguage}
+              accessibilityHint="Name the language you want the client to read — e.g. English, Hindi, Kannada, Tamil."
+            />
+          </View>
+          <View style={styles.actionFlex}>
+            <Button
+              label={translating ? 'Translating…' : 'Translate'}
+              onPress={() => void onTranslate()}
+              variant="secondary"
+              disabled={
+                translating ||
+                !transcript.trim() ||
+                !translationLanguage.trim()
+              }
+              busy={translating}
+            />
+          </View>
+        </View>
+        {translateError ? (
+          <Text
+            accessibilityLiveRegion="polite"
+            style={[styles.helperLeft, { color: theme.colors.peggyCoral }]}
+          >
+            {translateError}
+          </Text>
+        ) : null}
+        {transcriptTranslation ? (
+          <TextInput
+            value={transcriptTranslation}
+            onChangeText={setTranscriptTranslation}
+            multiline
+            style={styles.textArea}
+            accessibilityLabel={`${translationLanguage} translation`}
+          />
+        ) : null}
+      </View>
+
       <View style={styles.actions}>
         <View style={styles.actionFlex}>
           <Button

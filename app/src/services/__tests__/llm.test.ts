@@ -12,7 +12,13 @@ jest.mock('../config', () => ({
   API_VEND_BASE_URL: 'https://vend-test.example.com',
 }));
 
-import { parseAmount, regexExtract, extractWorkFields, vendGeminiKey } from '../llm';
+import {
+  parseAmount,
+  regexExtract,
+  extractWorkFields,
+  vendGeminiKey,
+  translateTranscript,
+} from '../llm';
 import { Platform } from 'react-native';
 
 describe('parseAmount — string → number', () => {
@@ -406,5 +412,116 @@ describe('extractWorkFields — online (Gemini-augmented) path', () => {
     // JSON.parse throws inside geminiExtract → returns null → baseline kept.
     expect(out.workType).toBe('painting');
     expect(out.amountReceived).toBe(3000);
+  });
+});
+
+describe('translateTranscript — Gemini-backed cross-language proof-of-work', () => {
+  const originalFetch = global.fetch;
+  const originalOS = Platform.OS;
+  afterEach(() => {
+    global.fetch = originalFetch;
+    Object.defineProperty(Platform, 'OS', { value: originalOS, configurable: true });
+  });
+
+  const mockVendThenTranslate = (translation: string): jest.Mock =>
+    jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          key: 'AIzaFAKE',
+          base_url: 'https://gen.example/v1',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          candidates: [{ content: { parts: [{ text: translation }] } }],
+        }),
+      });
+
+  it('returns the translated text on happy-path Gemini call', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true });
+    global.fetch = mockVendThenTranslate(
+      'Did plastering for Sharma. Received 5000, pending 2500.',
+    ) as any;
+    const out = await translateTranscript(
+      'शर्मा के लिए प्लास्टर किया। 5000 मिले, 2500 बाकी।',
+      'English',
+    );
+    expect(out).toBe(
+      'Did plastering for Sharma. Received 5000, pending 2500.',
+    );
+  });
+
+  it('returns null on empty transcript (guard, no vend call)', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as any;
+    expect(await translateTranscript('', 'English')).toBeNull();
+    expect(await translateTranscript('   ', 'English')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns null on empty target language (guard, no vend call)', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as any;
+    expect(await translateTranscript('some transcript', '')).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('returns null when vend fails', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'web', configurable: true });
+    global.fetch = jest.fn().mockResolvedValueOnce({
+      ok: false,
+      json: async () => ({ error: 'no keys' }),
+    }) as any;
+    expect(
+      await translateTranscript('some transcript', 'English'),
+    ).toBeNull();
+  });
+
+  it('returns null when Gemini upstream returns non-ok', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true });
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          key: 'AIzaFAKE',
+          base_url: 'https://gen.example/v1',
+        }),
+      })
+      .mockResolvedValueOnce({ ok: false, json: async () => ({}) }) as any;
+    expect(
+      await translateTranscript('some transcript', 'English'),
+    ).toBeNull();
+  });
+
+  it('returns null when Gemini returns no candidate text', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true });
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          key: 'AIzaFAKE',
+          base_url: 'https://gen.example/v1',
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ candidates: [] }),
+      }) as any;
+    expect(
+      await translateTranscript('some transcript', 'English'),
+    ).toBeNull();
+  });
+
+  it('trims whitespace from Gemini output', async () => {
+    Object.defineProperty(Platform, 'OS', { value: 'ios', configurable: true });
+    global.fetch = mockVendThenTranslate('  Did the work.  \n') as any;
+    expect(
+      await translateTranscript('did stuff', 'English'),
+    ).toBe('Did the work.');
   });
 });

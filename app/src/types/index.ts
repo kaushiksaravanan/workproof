@@ -21,6 +21,16 @@ export interface WorkRecord {
   photoUri: string;
   audioUri?: string;
   transcript: string;
+  /**
+   * Optional Gemini translation of the transcript. When present, the PDF
+   * renders BOTH the original and the translation. Populated when the
+   * crew taps the Translate action in the LogWork review step —
+   * addresses the cross-language proof-of-work case (crew speaks
+   * Kannada/Tamil/Hindi, client wants English).
+   */
+  transcriptTranslation?: string;
+  /** Human-readable name of the target language for transcriptTranslation. */
+  transcriptTranslationLanguage?: string;
   hash: string;
   anchorTxHash?: string;
   anchorChainId?: number;
