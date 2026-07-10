@@ -28,6 +28,17 @@ import {
 /** AsyncStorage key for the offline anchor queue. */
 const ANCHOR_QUEUE_KEY = "@workproof/anchor-queue";
 
+/**
+ * AsyncStorage key for per-hash reconcile-attempt counts. When
+ * MAX_RECONCILE_ATTEMPTS is exceeded, the hash is removed from the queue
+ * and appended to the dead-letter list — the on-chain anchor already
+ * landed, but we've given up trying to reconcile it with local state.
+ * A future recovery UI can drain the dead-letter list manually.
+ */
+const RECONCILE_ATTEMPTS_KEY = "@workproof/anchor-reconcile-attempts";
+const DEAD_LETTER_KEY = "@workproof/anchor-dead-letter";
+const MAX_RECONCILE_ATTEMPTS = 5;
+
 /** Minimal ABI fragment for the `anchor(bytes32)` entrypoint. */
 const ANCHOR_ABI = [
   "function anchor(bytes32 hash) external",
@@ -110,6 +121,59 @@ export async function getQueue(): Promise<string[]> {
 /** Persist the queue back to AsyncStorage. */
 async function setQueue(queue: string[]): Promise<void> {
   await AsyncStorage.setItem(ANCHOR_QUEUE_KEY, JSON.stringify(queue));
+}
+
+// ---------------------------------------------------------------------------
+// Reconcile-attempt bookkeeping — prevents the anchor-forever loop when
+// on-chain success is followed by a persistent local write failure (iOS
+// storage quota, Android disk full, corrupted AsyncStorage key). Without a
+// cap, every foreground bounce would re-submit the same hash on-chain
+// forever, burning gas on each retry.
+//
+// The counter is bumped when a reconcile throws. When it hits
+// MAX_RECONCILE_ATTEMPTS, the hash moves out of the retry queue into a
+// dead-letter bucket that no scheduled flush touches (a future recovery
+// UI can drain it explicitly).
+// ---------------------------------------------------------------------------
+
+/** Read per-hash reconcile-attempt counts. */
+async function getReconcileAttempts(): Promise<Record<string, number>> {
+  const raw = await AsyncStorage.getItem(RECONCILE_ATTEMPTS_KEY);
+  if (!raw) return {};
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, number>;
+    }
+    return {};
+  } catch {
+    return {};
+  }
+}
+
+async function setReconcileAttempts(
+  attempts: Record<string, number>,
+): Promise<void> {
+  await AsyncStorage.setItem(
+    RECONCILE_ATTEMPTS_KEY,
+    JSON.stringify(attempts),
+  );
+}
+
+/** Read the dead-letter list (hashes we anchored on-chain but couldn't reconcile locally). */
+export async function getDeadLetter(): Promise<string[]> {
+  const raw = await AsyncStorage.getItem(DEAD_LETTER_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+async function setDeadLetter(list: string[]): Promise<void> {
+  await AsyncStorage.setItem(DEAD_LETTER_KEY, JSON.stringify(list));
 }
 
 /** Append a hash to the offline queue (atomic via mutex, deduped). */
@@ -293,10 +357,45 @@ async function _flushQueue(
       if (reconcile) {
         try {
           await reconcile(hashHex, result);
+          // Reconcile succeeded — clear this hash's attempt counter.
+          await withQueueLock(async () => {
+            const attempts = await getReconcileAttempts();
+            if (hashHex in attempts) {
+              delete attempts[hashHex];
+              await setReconcileAttempts(attempts);
+            }
+          });
         } catch {
-          // Reconcile failure: leave the hash in the queue so the next
-          // flush retries the whole sequence. Better a duplicate on-chain
-          // event than a permanently-diverged local record.
+          // Reconcile failure: normally we'd leave the hash in the queue
+          // so the next flush retries. But if reconcile has been failing
+          // repeatedly (persistent AsyncStorage issue — disk full, quota
+          // exceeded, corrupted keys), retrying on every foreground would
+          // re-submit the same hash on-chain forever and burn gas each
+          // time. Bump the attempt counter; if it hits the cap, move
+          // the hash to a dead-letter list that scheduled flushes ignore.
+          const shouldDeadLetter = await withQueueLock(async () => {
+            const attempts = await getReconcileAttempts();
+            const next = (attempts[hashHex] ?? 0) + 1;
+            attempts[hashHex] = next;
+            await setReconcileAttempts(attempts);
+            return next >= MAX_RECONCILE_ATTEMPTS;
+          });
+          if (shouldDeadLetter) {
+            // Move from queue → dead-letter. On-chain anchor already
+            // succeeded; local state stays diverged until a future
+            // recovery UI drains the dead-letter list explicitly.
+            await withQueueLock(async () => {
+              const current = await getQueue();
+              await setQueue(current.filter((h) => h !== hashHex));
+              const dead = await getDeadLetter();
+              if (!dead.includes(hashHex)) {
+                await setDeadLetter([...dead, hashHex]);
+              }
+              const attempts = await getReconcileAttempts();
+              delete attempts[hashHex];
+              await setReconcileAttempts(attempts);
+            });
+          }
           continue;
         }
       }

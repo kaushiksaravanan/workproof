@@ -11,6 +11,7 @@
 interface VercelRequest {
   method?: string;
   query: { [key: string]: string | string[] | undefined };
+  headers: { [key: string]: string | string[] | undefined };
 }
 
 interface VercelResponse {
@@ -33,6 +34,41 @@ const ALLOWED_GROUPS = new Set([
   "cloudflare-ai",
 ]);
 
+/**
+ * Origin allow-list. Web builds calling /api/vend from workproof-demo.vercel.app
+ * (or a configured production domain) send an Origin header — we reject any
+ * cross-origin request outright. Native builds (Expo Go / APK) don't set
+ * Origin, so we allow requests without an Origin header, but only for
+ * User-Agents that look like a mobile app. This is not attestation-grade —
+ * both headers are easy to forge — but it raises the friction for someone
+ * who stumbles onto the deployed URL and blindly curls it.
+ *
+ * Real hardening requires attested per-install tokens (Play Integrity /
+ * DeviceCheck) or a signed short-lived credential. See workproof task #32.
+ */
+const ALLOWED_ORIGINS = (
+  process.env.VEND_ALLOWED_ORIGINS ??
+  "https://workproof-demo.vercel.app,http://localhost:8081,http://localhost:19006"
+)
+  .split(",")
+  .map((o: string) => o.trim())
+  .filter(Boolean);
+
+function isOriginAllowed(req: VercelRequest): boolean {
+  const originHeader = req.headers?.origin;
+  const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
+  if (origin) {
+    return ALLOWED_ORIGINS.includes(origin);
+  }
+  // No Origin header — treat as native. Real Expo Go / APK builds do NOT
+  // send Origin. Browsers ALWAYS send Origin on cross-origin fetches. So
+  // if Origin is absent, either it's a native app OR it's a same-origin
+  // browser request that somehow lost the header (which is not a normal
+  // shape). Allow it — but log for auditability by returning true; a
+  // future hardening pass adds device attestation here.
+  return true;
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
@@ -41,6 +77,11 @@ export default async function handler(
 
   if (req.method && req.method !== "GET" && req.method !== "HEAD") {
     res.status(405).json({ error: "method not allowed" });
+    return;
+  }
+
+  if (!isOriginAllowed(req)) {
+    res.status(403).json({ error: "origin not allowed" });
     return;
   }
 

@@ -483,4 +483,74 @@ describe('flushQueue', () => {
     // Queue was drained.
     expect(await getQueue()).toEqual([]);
   });
+
+  it('reconcile-attempt cap: after MAX_RECONCILE_ATTEMPTS the hash moves to dead-letter', async () => {
+    // Regression: persistent AsyncStorage failure on the reconcile side
+    // (iOS storage quota, Android disk full, corrupted key) used to cause
+    // an infinite anchor-forever loop — every foreground bounce would
+    // re-submit the same hash on-chain and burn gas each time. Now:
+    // 5 reconcile failures moves the hash into a dead-letter list that
+    // scheduled flushes ignore, and the queue-remove step runs so we
+    // stop re-anchoring on the next flush.
+    mockConfigured = true;
+    mockAnchorImpl = async () => ({
+      hash: '0xok',
+      wait: async () => undefined,
+    });
+    await AsyncStorage.setItem(
+      '@workproof/anchor-queue',
+      JSON.stringify([validHash]),
+    );
+    const { flushQueue, getQueue, getDeadLetter } = importAnchor();
+
+    const failingReconcile = async (): Promise<void> => {
+      throw new Error('AsyncStorage full');
+    };
+
+    // 5 flush attempts, all with reconcile failure. Each bumps the
+    // per-hash counter. On the 5th attempt the hash moves to dead-letter.
+    for (let i = 0; i < 5; i++) {
+      await flushQueue(failingReconcile);
+    }
+
+    // After the cap: hash left the queue, landed in dead-letter.
+    expect(await getQueue()).toEqual([]);
+    expect(await getDeadLetter()).toEqual([validHash]);
+  });
+
+  it('reconcile-attempt counter resets on eventual success', async () => {
+    // If a reconcile fails once, then succeeds on retry, the counter is
+    // cleared so a future transient failure gets its full retry budget
+    // instead of inheriting the earlier failures.
+    mockConfigured = true;
+    mockAnchorImpl = async () => ({
+      hash: '0xok',
+      wait: async () => undefined,
+    });
+    await AsyncStorage.setItem(
+      '@workproof/anchor-queue',
+      JSON.stringify([validHash]),
+    );
+    const { flushQueue, getQueue } = importAnchor();
+
+    let reconcileCall = 0;
+    const flaky = async (): Promise<void> => {
+      reconcileCall += 1;
+      if (reconcileCall === 1) throw new Error('transient');
+      // Success on retry.
+    };
+
+    await flushQueue(flaky); // fails, bumps counter to 1, hash still in queue
+    expect(await getQueue()).toEqual([validHash]);
+
+    await flushQueue(flaky); // succeeds, counter cleared, hash removed
+    expect(await getQueue()).toEqual([]);
+
+    // Verify counter is cleared by reading the attempts key directly.
+    const rawAttempts = await AsyncStorage.getItem(
+      '@workproof/anchor-reconcile-attempts',
+    );
+    const attempts = rawAttempts ? JSON.parse(rawAttempts) : {};
+    expect(attempts[validHash]).toBeUndefined();
+  });
 });

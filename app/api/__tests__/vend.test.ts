@@ -38,8 +38,13 @@ function makeRes(): FakeRes {
 function makeReq(
   query: Record<string, string | undefined> = {},
   method: string = 'GET',
-): { method: string; query: Record<string, string | undefined> } {
-  return { method, query };
+  headers: Record<string, string | undefined> = {},
+): {
+  method: string;
+  query: Record<string, string | undefined>;
+  headers: Record<string, string | undefined>;
+} {
+  return { method, query, headers };
 }
 
 const CIPHERSTACK_BASE = 'https://cipherstack.kaushik.cv/api/v1';
@@ -178,13 +183,68 @@ describe('/api/vend', () => {
     const res = makeRes();
     // TS: our fake accepts arrays too
     await handler(
-      { method: 'GET', query: { group: ['gemini', 'other'] } } as unknown as {
+      {
+        method: 'GET',
+        query: { group: ['gemini', 'other'] },
+        headers: {},
+      } as unknown as {
         method: string;
         query: Record<string, string | undefined>;
+        headers: Record<string, string | undefined>;
       },
       res,
     );
     expect(fetchMock.mock.calls[0]?.[0]).toBe(`${CIPHERSTACK_BASE}/vend/gemini`);
     expect(res.statusCode).toBe(200);
+  });
+
+  describe('origin allow-list', () => {
+    it('accepts requests with an allow-listed browser Origin', async () => {
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+      global.fetch = jest.fn().mockResolvedValue({
+        status: 200,
+        text: async () => JSON.stringify({ key: 'K' }),
+      }) as unknown as typeof fetch;
+
+      const res = makeRes();
+      await handler(
+        makeReq({ group: 'gemini' }, 'GET', {
+          origin: 'https://workproof-demo.vercel.app',
+        }),
+        res,
+      );
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('rejects requests with a non-allow-listed browser Origin', async () => {
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+      const fetchMock = jest.fn();
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      const res = makeRes();
+      await handler(
+        makeReq({ group: 'gemini' }, 'GET', {
+          origin: 'https://evil.example.com',
+        }),
+        res,
+      );
+      expect(res.statusCode).toBe(403);
+      expect(res.body).toEqual({ error: 'origin not allowed' });
+      // Upstream never called — we short-circuit before hitting CipherStack.
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('accepts requests with no Origin header (native app pattern)', async () => {
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+      global.fetch = jest.fn().mockResolvedValue({
+        status: 200,
+        text: async () => JSON.stringify({ key: 'K' }),
+      }) as unknown as typeof fetch;
+
+      const res = makeRes();
+      // Native Expo Go / APK builds do not send Origin. Simulate that.
+      await handler(makeReq({ group: 'gemini' }, 'GET'), res);
+      expect(res.statusCode).toBe(200);
+    });
   });
 });
