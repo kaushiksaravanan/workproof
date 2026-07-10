@@ -127,7 +127,13 @@ function AudioPlayer({ uri }: AudioPlayerProps): React.ReactElement {
         // Detach the status callback synchronously before unloadAsync resolves
         // so a late status tick can't push state on the unmounted component.
         local.setOnPlaybackStatusUpdate(null);
-        void local.unloadAsync();
+        // Fire-and-forget the async unload — cleanup functions can't be async.
+        // Swallow rejections: a failing unload never breaks the caller (React
+        // will discard the component anyway), and an unhandled rejection here
+        // would surface as a red-box warning in dev.
+        local.unloadAsync().catch(() => {
+          /* no-op */
+        });
       }
     };
   }, [uri]);
