@@ -9,7 +9,7 @@
  */
 
 import { Platform } from "react-native";
-import { CIPHERSTACK_TOKEN, CIPHERSTACK_VEND_URL } from "./config";
+import { API_VEND_BASE_URL } from "./config";
 import type { ExtractedFields } from "../types";
 
 export type { ExtractedFields };
@@ -54,18 +54,18 @@ const EMPTY: ExtractedFields = {
  * Vend a Gemini API key from CipherStack. Returns null on any error so the
  * caller can transparently fall back to the regex baseline.
  *
- * Web builds route through /api/vend/gemini so the CipherStack service token
- * stays server-side (it would otherwise be inlined into the public JS bundle).
- * Native builds hit CipherStack directly with the bundled EXPO_PUBLIC_ token.
+ * Both web AND native route through /api/vend now — the CipherStack service
+ * token lives only in the Vercel serverless env, never in the client bundle.
+ * Web uses the same-origin `/api/vend?group=gemini`; native (Expo Go / APK)
+ * uses the full URL from `API_VEND_BASE_URL`. See workproof task #31.
  */
 export async function vendGeminiKey(): Promise<VendedKey | null> {
   try {
     const isWeb = Platform.OS === "web";
-    const url = isWeb ? "/api/vend?group=gemini" : CIPHERSTACK_VEND_URL;
-    const headers: Record<string, string> = isWeb
-      ? {}
-      : { Authorization: `Bearer ${CIPHERSTACK_TOKEN}` };
-    const res = await fetch(url, { method: "GET", headers });
+    const url = isWeb
+      ? "/api/vend?group=gemini"
+      : `${API_VEND_BASE_URL}/api/vend?group=gemini`;
+    const res = await fetch(url, { method: "GET" });
     if (!res.ok) return null;
     const json = (await res.json()) as {
       key?: string;

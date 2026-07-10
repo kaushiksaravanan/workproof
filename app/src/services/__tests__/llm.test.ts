@@ -6,12 +6,10 @@
  * llm.ts's dependency graph but we don't need it directly.
  */
 
-// Config mock — llm.ts imports CIPHERSTACK_TOKEN + CIPHERSTACK_VEND_URL.
-// Provide a defined token so the native branch of vendGeminiKey exercises
-// the Bearer-header path. The offline regex tests never touch either value.
+// Config mock — llm.ts imports API_VEND_BASE_URL. Fix the value so the
+// native path builds a predictable URL that the tests can assert on.
 jest.mock('../config', () => ({
-  CIPHERSTACK_TOKEN: 'csk_test_token',
-  CIPHERSTACK_VEND_URL: 'https://example.local/vend/gemini',
+  API_VEND_BASE_URL: 'https://vend-test.example.com',
 }));
 
 import { parseAmount, regexExtract, extractWorkFields, vendGeminiKey } from '../llm';
@@ -240,7 +238,7 @@ describe('vendGeminiKey — CipherStack vend flow', () => {
     Object.defineProperty(Platform, 'OS', { value: os, configurable: true });
   };
 
-  it('web path hits /api/vend with no Authorization header', async () => {
+  it('web path hits same-origin /api/vend', async () => {
     setOS('web');
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
@@ -251,11 +249,14 @@ describe('vendGeminiKey — CipherStack vend flow', () => {
     expect(result).toEqual({ key: 'AIzaWEB', baseUrl: 'https://web.example/v1' });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('/api/vend?group=gemini');
-    expect((init as any).headers).toEqual({});
     expect((init as any).method).toBe('GET');
+    // Regression: previously native passed an Authorization header inline;
+    // both paths now route through /api/vend, and neither should send the
+    // CipherStack token client-side. Verify no Authorization header.
+    expect((init as any).headers?.Authorization).toBeUndefined();
   });
 
-  it('native path hits CipherStack URL with Bearer token', async () => {
+  it('native path hits API_VEND_BASE_URL/api/vend — no Authorization header', async () => {
     setOS('ios');
     const fetchMock = jest.fn().mockResolvedValue({
       ok: true,
@@ -269,10 +270,13 @@ describe('vendGeminiKey — CipherStack vend flow', () => {
       baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
     });
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://example.local/vend/gemini');
-    expect((init as any).headers).toEqual({
-      Authorization: 'Bearer csk_test_token',
-    });
+    // Native uses the Vercel deployment URL from config, not CipherStack.
+    expect(url).toBe('https://vend-test.example.com/api/vend?group=gemini');
+    // Regression: the CipherStack token used to be bundled into the APK
+    // via EXPO_PUBLIC_CIPHERSTACK_TOKEN and injected as a Bearer header.
+    // Task #31 removed that — the token now lives only in the Vercel
+    // serverless env. This test locks that in.
+    expect((init as any).headers?.Authorization).toBeUndefined();
   });
 
   it('returns null when the vend response is not ok', async () => {

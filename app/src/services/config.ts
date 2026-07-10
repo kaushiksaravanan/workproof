@@ -8,12 +8,18 @@
  * mobile bundle and are extractable from the APK.
  */
 
-/** CipherStack service token used to vend Gemini keys. */
-export const CIPHERSTACK_TOKEN = process.env.EXPO_PUBLIC_CIPHERSTACK_TOKEN;
-
-/** CipherStack vend endpoint for the `gemini` group (auto-rotates LRU key). */
-export const CIPHERSTACK_VEND_URL =
-  "https://cipherstack.kaushik.cv/api/v1/vend/gemini";
+/**
+ * Base URL of the Vercel serverless deployment hosting /api/vend. Web
+ * builds use the same-origin `/api/vend` and don't need this; native
+ * builds (Expo Go / APK) hit the deployed URL directly.
+ *
+ * The CipherStack service token is NOT stored client-side — it lives in
+ * the /api/vend proxy's server-only env. This closes the "extract the
+ * token from the APK bundle" attack surface. See workproof task #31.
+ */
+export const API_VEND_BASE_URL =
+  process.env.EXPO_PUBLIC_API_VEND_BASE_URL ??
+  "https://workproof-demo.vercel.app";
 
 /** Polygon Amoy testnet JSON-RPC endpoint. */
 export const POLYGON_AMOY_RPC = "https://rpc-amoy.polygon.technology";
