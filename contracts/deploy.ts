@@ -14,26 +14,27 @@ import { JsonRpcProvider, Wallet, ContractFactory } from "ethers";
 
 import { POLYGON_AMOY_RPC } from "../app/src/services/config";
 
-// TODO: paste-after-compile — replace with the ABI emitted by `solc` /
-// `forge build` / `hardhat compile` for WorkProofAnchor.sol.
+// ABI for WorkProofAnchor. This is deterministic from the .sol source — one
+// event, one function — so it's pre-populated here so the operator only
+// needs to paste bytecode after compile.
 const ABI: ReadonlyArray<unknown> = [
-  // {
-  //   "anonymous": false,
-  //   "inputs": [
-  //     { "indexed": true,  "internalType": "bytes32", "name": "hash",      "type": "bytes32" },
-  //     { "indexed": true,  "internalType": "address", "name": "worker",    "type": "address" },
-  //     { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
-  //   ],
-  //   "name": "Anchored",
-  //   "type": "event"
-  // },
-  // {
-  //   "inputs": [{ "internalType": "bytes32", "name": "hash", "type": "bytes32" }],
-  //   "name": "anchor",
-  //   "outputs": [],
-  //   "stateMutability": "nonpayable",
-  //   "type": "function"
-  // }
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "bytes32", name: "hash", type: "bytes32" },
+      { indexed: true, internalType: "address", name: "worker", type: "address" },
+      { indexed: false, internalType: "uint256", name: "timestamp", type: "uint256" },
+    ],
+    name: "Anchored",
+    type: "event",
+  },
+  {
+    inputs: [{ internalType: "bytes32", name: "hash", type: "bytes32" }],
+    name: "anchor",
+    outputs: [],
+    stateMutability: "nonpayable",
+    type: "function",
+  },
 ];
 
 // TODO: paste-after-compile — replace with the bytecode (creation code, with
@@ -48,9 +49,9 @@ async function main(): Promise<void> {
     );
   }
 
-  if (BYTECODE === "0x" || ABI.length === 0) {
+  if (BYTECODE === "0x") {
     throw new Error(
-      "ABI / BYTECODE constants are placeholders — compile WorkProofAnchor.sol and paste them in before running."
+      "BYTECODE is a placeholder — compile WorkProofAnchor.sol (solc 0.8.24) and paste the creation bytecode in before running."
     );
   }
 
