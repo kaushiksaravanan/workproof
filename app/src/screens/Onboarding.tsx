@@ -20,7 +20,7 @@ import { useReducedMotion } from '../theme/useReducedMotion';
 /**
  * Onboarding — 3-slide carousel that introduces Workproof:
  *
- *   1. Voice + photo + on-device AI logging.
+ *   1. Voice + photo + on-device capture; typed transcript.
  *   2. Offline-first records that survive without a server.
  *   3. Optional Polygon Amoy anchor + "Get started" CTA.
  *
