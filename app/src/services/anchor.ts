@@ -204,20 +204,73 @@ async function clearReconcileAttempts(hashHex: string): Promise<void> {
   await AsyncStorage.removeItem(`${RECONCILE_ATTEMPTS_KEY}:${hashHex}`);
 }
 
-/** Read the dead-letter list (hashes we anchored on-chain but couldn't reconcile locally). */
-export async function getDeadLetter(): Promise<string[]> {
+/**
+ * Dead-letter entry. Captures enough context for a future recovery UI:
+ *  - hashHex identifies the record on-chain and locally
+ *  - workerAddress: the wallet that WAS supposed to sign (may differ from
+ *    the current install's wallet if the mismatch is what dead-lettered it)
+ *  - reason distinguishes reconcile-exhaustion (anchor succeeded, local
+ *    write kept failing) from signer-mismatch (wallet rotated between
+ *    enqueue and flush; anchor never fired)
+ *  - addedAt lets the recovery UI sort or cap entries by age
+ */
+export interface DeadLetterEntry {
+  hashHex: string;
+  workerAddress: string;
+  reason: "reconcile-cap" | "signer-mismatch";
+  addedAt: string;
+}
+
+function isDeadLetterEntry(v: unknown): v is DeadLetterEntry {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    typeof (v as { hashHex?: unknown }).hashHex === "string" &&
+    typeof (v as { workerAddress?: unknown }).workerAddress === "string" &&
+    typeof (v as { reason?: unknown }).reason === "string" &&
+    typeof (v as { addedAt?: unknown }).addedAt === "string"
+  );
+}
+
+/**
+ * Read the dead-letter list. Backward-compatible with the pre-schema
+ * shape (bare string[]): legacy entries surface with workerAddress='',
+ * reason='reconcile-cap' (best guess), addedAt=''.
+ */
+export async function getDeadLetter(): Promise<DeadLetterEntry[]> {
   const raw = await AsyncStorage.getItem(DEAD_LETTER_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as string[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    const out: DeadLetterEntry[] = [];
+    for (const item of parsed) {
+      if (typeof item === "string") {
+        out.push({
+          hashHex: item,
+          workerAddress: "",
+          reason: "reconcile-cap",
+          addedAt: "",
+        });
+      } else if (isDeadLetterEntry(item)) {
+        out.push(item);
+      }
+    }
+    return out;
   } catch {
     return [];
   }
 }
 
-async function setDeadLetter(list: string[]): Promise<void> {
+async function setDeadLetter(list: DeadLetterEntry[]): Promise<void> {
   await AsyncStorage.setItem(DEAD_LETTER_KEY, JSON.stringify(list));
+}
+
+function nowIso(): string {
+  // Test-friendly wrapper. new Date().toISOString() is deterministic
+  // enough for tests that don't need to freeze time; the dead-letter
+  // addedAt is informational, not load-bearing.
+  return new Date().toISOString();
 }
 
 /**
@@ -455,8 +508,16 @@ async function _flushQueue(
           const current = await getQueue();
           await setQueue(current.filter((e) => e.hashHex !== hashHex));
           const dead = await getDeadLetter();
-          if (!dead.includes(hashHex)) {
-            await setDeadLetter([...dead, hashHex]);
+          if (!dead.some((e) => e.hashHex === hashHex)) {
+            await setDeadLetter([
+              ...dead,
+              {
+                hashHex,
+                workerAddress: expectedSigner,
+                reason: "signer-mismatch",
+                addedAt: nowIso(),
+              },
+            ]);
           }
         });
         continue;
@@ -499,13 +560,19 @@ async function _flushQueue(
               const current = await getQueue();
               await setQueue(current.filter((e) => e.hashHex !== hashHex));
               const dead = await getDeadLetter();
-              if (!dead.includes(hashHex)) {
+              if (!dead.some((e) => e.hashHex === hashHex)) {
                 // Cap the dead-letter list at 1000 entries to bound
                 // AsyncStorage bloat. Oldest entries evicted first.
+                const newEntry: DeadLetterEntry = {
+                  hashHex,
+                  workerAddress: entry.workerAddress,
+                  reason: "reconcile-cap",
+                  addedAt: nowIso(),
+                };
                 const nextDead =
                   dead.length >= 1000
-                    ? [...dead.slice(dead.length - 999), hashHex]
-                    : [...dead, hashHex];
+                    ? [...dead.slice(dead.length - 999), newEntry]
+                    : [...dead, newEntry];
                 await setDeadLetter(nextDead);
               }
               await clearReconcileAttempts(hashHex);

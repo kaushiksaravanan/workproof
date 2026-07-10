@@ -521,9 +521,18 @@ describe('flushQueue', () => {
       await flushQueue(failingReconcile);
     }
 
-    // After the cap: hash left the queue, landed in dead-letter.
+    // After the cap: hash left the queue, landed in dead-letter with
+    // the reconcile-cap reason. The workerAddress captured is the one
+    // from the queued entry — this test seeds a legacy bare-string
+    // entry so workerAddress is '' (post-schema-change entries carry
+    // the real wallet address).
     expect((await getQueue()).map((e) => e.hashHex)).toEqual([]);
-    expect(await getDeadLetter()).toEqual([validHash]);
+    const dead = await getDeadLetter();
+    expect(dead).toHaveLength(1);
+    expect(dead[0].hashHex).toBe(validHash);
+    expect(dead[0].reason).toBe('reconcile-cap');
+    expect(dead[0].workerAddress).toBe('');
+    expect(dead[0].addedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
   it('reconcile-attempt counter resets on eventual success', async () => {
@@ -589,9 +598,16 @@ describe('flushQueue', () => {
     // No on-chain submission — the guard fired before _anchorOnChain.
     expect(anchorCalls).toBe(0);
     expect(results).toEqual([]);
-    // Queue is empty (entry moved to dead-letter).
+    // Queue is empty (entry moved to dead-letter with signer-mismatch reason).
     expect(await getQueue()).toEqual([]);
-    expect(await getDeadLetter()).toEqual([validHash]);
+    const dead = await getDeadLetter();
+    expect(dead).toHaveLength(1);
+    expect(dead[0].hashHex).toBe(validHash);
+    expect(dead[0].reason).toBe('signer-mismatch');
+    // The captured workerAddress is the EXPECTED signer (from the queued
+    // entry), not the current wallet — so a recovery UI can identify
+    // which past install created the record.
+    expect(dead[0].workerAddress).toBe('0xdifferentwallet');
   });
 
   it('legacy bare-string queue entries still anchor (backward compat)', async () => {
