@@ -382,13 +382,21 @@ export function buildProofHtml(rec: WorkRecord): string {
     <div class="section-title">Content hash</div>
     <div class="hash-block">${escapeHtml(chunkedHash)}</div>
 
+    ${
+      rec.workerAddress
+        ? `<div class="section-title">Anchored by (worker wallet)</div>
+    <div class="hash-block">${escapeHtml(rec.workerAddress)}</div>`
+        : ""
+    }
+
     <div class="verify-row">
       <div class="verify-text">
         ${
           anchored
             ? `Anchored on-chain. Verify by visiting:<br/><a href="${escapeHtml(
                 explorer
-              )}">${escapeHtml(explorer)}</a>`
+              )}">${escapeHtml(explorer)}</a><br/>
+                <span style="font-size:0.9em;">The on-chain <code>Anchored(hash, worker, timestamp)</code> event's <code>worker</code> field should equal the wallet address above.</span>`
             : "Not yet anchored. Anchor this record on-chain in the WorkProof app to make the timestamp independently verifiable."
         }
       </div>
@@ -400,9 +408,14 @@ export function buildProofHtml(rec: WorkRecord): string {
         Verify integrity by re-hashing the canonical record.
         Recipe: SHA-256 of raw photo bytes (lowercase hex), SHA-256 of raw audio
         bytes if any (lowercase hex), substitute those into the record's
-        photoUri / audioUri fields, sort top-level keys alphabetically,
-        JSON.stringify, then SHA-256 of the resulting UTF-8 bytes (lowercase
-        hex). Match against the hash above.
+        photoUri / audioUri fields (audioUri stays undefined if no audio was
+        captured, and is omitted from the serialized record), sort top-level
+        keys alphabetically (JSON.stringify with the sorted key order),
+        UTF-8 encode the resulting string, then SHA-256 of those bytes
+        (lowercase hex). Match against the hash above. The record's
+        workerAddress field is included in the canonical bytes so the
+        cryptographic binding attributes this record to the on-chain
+        signer.
       </span>
     </div>
   </div>

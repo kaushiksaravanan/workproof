@@ -106,20 +106,60 @@ function withSubmitLock<T>(work: () => Promise<T>): Promise<T> {
   return next;
 }
 
-/** Read the queued hashes from AsyncStorage (oldest first). */
-export async function getQueue(): Promise<string[]> {
+/**
+ * Queue entry. Each queued hash carries the signer's wallet address at the
+ * time of enqueue so a later flush can refuse to anchor from a rotated
+ * wallet (which would silently break the pdf-to-chain identity binding).
+ *
+ * For backward-compat with entries written before this change (bare
+ * string[]), getQueue tolerates both shapes and normalizes to entries.
+ * Entries without workerAddress use the special sentinel '' — those
+ * entries CAN still be anchored (best-effort), but flushQueue skips them
+ * when a strict-signer wallet mismatch is detected.
+ */
+export interface QueueEntry {
+  hashHex: string;
+  workerAddress: string;
+}
+
+function isQueueEntry(v: unknown): v is QueueEntry {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    typeof (v as { hashHex?: unknown }).hashHex === "string" &&
+    typeof (v as { workerAddress?: unknown }).workerAddress === "string"
+  );
+}
+
+/**
+ * Read the queued anchor entries from AsyncStorage (oldest first).
+ * Backward-compatible with the pre-signer-binding shape (bare string[]) —
+ * legacy entries surface as QueueEntry with workerAddress = '' so the
+ * caller can distinguish them.
+ */
+export async function getQueue(): Promise<QueueEntry[]> {
   const raw = await AsyncStorage.getItem(ANCHOR_QUEUE_KEY);
   if (!raw) return [];
   try {
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as string[]) : [];
+    if (!Array.isArray(parsed)) return [];
+    const out: QueueEntry[] = [];
+    for (const item of parsed) {
+      if (typeof item === "string") {
+        // Legacy bare-string entry — no signer binding.
+        out.push({ hashHex: item, workerAddress: "" });
+      } else if (isQueueEntry(item)) {
+        out.push(item);
+      }
+      // Anything else is corrupt; skip silently.
+    }
+    return out;
   } catch {
     return [];
   }
 }
 
-/** Persist the queue back to AsyncStorage. */
-async function setQueue(queue: string[]): Promise<void> {
+async function setQueue(queue: QueueEntry[]): Promise<void> {
   await AsyncStorage.setItem(ANCHOR_QUEUE_KEY, JSON.stringify(queue));
 }
 
@@ -136,28 +176,32 @@ async function setQueue(queue: string[]): Promise<void> {
 // UI can drain it explicitly).
 // ---------------------------------------------------------------------------
 
-/** Read per-hash reconcile-attempt counts. */
-async function getReconcileAttempts(): Promise<Record<string, number>> {
-  const raw = await AsyncStorage.getItem(RECONCILE_ATTEMPTS_KEY);
-  if (!raw) return {};
-  try {
-    const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, number>;
-    }
-    return {};
-  } catch {
-    return {};
-  }
+/**
+ * Read a single hash's reconcile-attempt count. Stored as its own
+ * AsyncStorage key (`@workproof/anchor-reconcile-attempts:<hash>`) so
+ * one hash's corrupted counter can't wipe out every other hash's budget.
+ */
+async function getReconcileAttempts(hashHex: string): Promise<number> {
+  const raw = await AsyncStorage.getItem(
+    `${RECONCILE_ATTEMPTS_KEY}:${hashHex}`,
+  );
+  if (!raw) return 0;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : 0;
 }
 
 async function setReconcileAttempts(
-  attempts: Record<string, number>,
+  hashHex: string,
+  count: number,
 ): Promise<void> {
   await AsyncStorage.setItem(
-    RECONCILE_ATTEMPTS_KEY,
-    JSON.stringify(attempts),
+    `${RECONCILE_ATTEMPTS_KEY}:${hashHex}`,
+    String(count),
   );
+}
+
+async function clearReconcileAttempts(hashHex: string): Promise<void> {
+  await AsyncStorage.removeItem(`${RECONCILE_ATTEMPTS_KEY}:${hashHex}`);
 }
 
 /** Read the dead-letter list (hashes we anchored on-chain but couldn't reconcile locally). */
@@ -176,15 +220,21 @@ async function setDeadLetter(list: string[]): Promise<void> {
   await AsyncStorage.setItem(DEAD_LETTER_KEY, JSON.stringify(list));
 }
 
-/** Append a hash to the offline queue (atomic via mutex, deduped). */
+/**
+ * Append a hash to the offline queue (atomic via mutex, deduped).
+ * Records the signer's current wallet address alongside the hash so
+ * flushQueue can detect wallet rotation between enqueue and flush and
+ * refuse to anchor with the wrong signer.
+ */
 async function enqueueHash(hashHex: string): Promise<void> {
+  const walletAddress = (await getOrCreateWallet()).address;
   await withQueueLock(async () => {
     const queue = await getQueue();
     // Skip if already queued — otherwise a double-tap on 'Retry anchor'
     // would submit the same hash twice (gas waste on mainnet; harmless on
     // testnet but still worth avoiding).
-    if (queue.includes(hashHex)) return;
-    queue.push(hashHex);
+    if (queue.some((e) => e.hashHex === hashHex)) return;
+    queue.push({ hashHex, workerAddress: walletAddress });
     await setQueue(queue);
   });
 }
@@ -333,6 +383,10 @@ async function _flushQueue(
     return [];
   }
 
+  // Resolve the current signer wallet address once — used to check for
+  // rotation against each queued entry's expected signer.
+  const currentWalletAddress = (await getOrCreateWallet()).address.toLowerCase();
+
   // Snapshot the queue without clearing it. Items stay in AsyncStorage
   // through their entire anchor attempt so a mid-flight process kill
   // doesn't lose them.
@@ -344,7 +398,33 @@ async function _flushQueue(
 
   const results: Array<{ hashHex: string; result: AnchorResult }> = [];
 
-  for (const hashHex of snapshot) {
+  for (const entry of snapshot) {
+    const { hashHex, workerAddress: expectedSigner } = entry;
+    // Signer mismatch → refuse to anchor. workerAddress='' is a legacy
+    // entry from before this schema change; anchor it (best-effort, no
+    // stricter guarantee available). Otherwise the current wallet MUST
+    // match — anchoring with a rotated wallet would produce an
+    // Anchored(hash, worker=new, ...) on-chain event whose `worker`
+    // doesn't match the WorkRecord's workerAddress, silently breaking
+    // the pdf-to-chain identity binding.
+    if (
+      expectedSigner !== "" &&
+      expectedSigner.toLowerCase() !== currentWalletAddress
+    ) {
+      // Move this entry to dead-letter and skip. The record is now
+      // orphan-anchorable-locally: on-chain anchor never happened, but
+      // the current wallet isn't the one the user attributed it to.
+      // A recovery UI can decide what to do (surface, delete, re-attest).
+      await withQueueLock(async () => {
+        const current = await getQueue();
+        await setQueue(current.filter((e) => e.hashHex !== hashHex));
+        const dead = await getDeadLetter();
+        if (!dead.includes(hashHex)) {
+          await setDeadLetter([...dead, hashHex]);
+        }
+      });
+      continue;
+    }
     try {
       assertValidHash(hashHex);
       const result = await _anchorOnChain(hashHex);
@@ -358,11 +438,7 @@ async function _flushQueue(
           await reconcile(hashHex, result);
           // Reconcile succeeded — clear this hash's attempt counter.
           await withQueueLock(async () => {
-            const attempts = await getReconcileAttempts();
-            if (hashHex in attempts) {
-              delete attempts[hashHex];
-              await setReconcileAttempts(attempts);
-            }
+            await clearReconcileAttempts(hashHex);
           });
         } catch {
           // Reconcile failure: normally we'd leave the hash in the queue
@@ -373,10 +449,9 @@ async function _flushQueue(
           // time. Bump the attempt counter; if it hits the cap, move
           // the hash to a dead-letter list that scheduled flushes ignore.
           const shouldDeadLetter = await withQueueLock(async () => {
-            const attempts = await getReconcileAttempts();
-            const next = (attempts[hashHex] ?? 0) + 1;
-            attempts[hashHex] = next;
-            await setReconcileAttempts(attempts);
+            const current = await getReconcileAttempts(hashHex);
+            const next = current + 1;
+            await setReconcileAttempts(hashHex, next);
             return next >= MAX_RECONCILE_ATTEMPTS;
           });
           if (shouldDeadLetter) {
@@ -385,14 +460,18 @@ async function _flushQueue(
             // recovery UI drains the dead-letter list explicitly.
             await withQueueLock(async () => {
               const current = await getQueue();
-              await setQueue(current.filter((h) => h !== hashHex));
+              await setQueue(current.filter((e) => e.hashHex !== hashHex));
               const dead = await getDeadLetter();
               if (!dead.includes(hashHex)) {
-                await setDeadLetter([...dead, hashHex]);
+                // Cap the dead-letter list at 1000 entries to bound
+                // AsyncStorage bloat. Oldest entries evicted first.
+                const nextDead =
+                  dead.length >= 1000
+                    ? [...dead.slice(dead.length - 999), hashHex]
+                    : [...dead, hashHex];
+                await setDeadLetter(nextDead);
               }
-              const attempts = await getReconcileAttempts();
-              delete attempts[hashHex];
-              await setReconcileAttempts(attempts);
+              await clearReconcileAttempts(hashHex);
             });
           }
           continue;
@@ -403,7 +482,7 @@ async function _flushQueue(
       // concurrent enqueue can't get lost in a read-modify-write race.
       await withQueueLock(async () => {
         const current = await getQueue();
-        await setQueue(current.filter((h) => h !== hashHex));
+        await setQueue(current.filter((e) => e.hashHex !== hashHex));
       });
     } catch {
       // Leave the failed hash in the queue for a future flush. No merge

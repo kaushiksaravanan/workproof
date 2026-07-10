@@ -76,22 +76,52 @@ describe('getOrCreateWallet', () => {
     expect(SecureStore.setItemAsync).toHaveBeenCalledTimes(1);
   });
 
-  it('falls back to a fresh (in-memory) wallet if secure-store read throws', async () => {
+  it('THROWS on secure-store read failure (does NOT rotate the wallet)', async () => {
     (SecureStore.getItemAsync as jest.Mock).mockRejectedValueOnce(
       new Error('keychain locked'),
     );
-    const wallet = await getOrCreateWallet();
-    // Still returns a valid wallet — we don't crash the caller.
-    expect(wallet.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    // Regression: previously getOrCreateWallet silently fell through to
+    // Wallet.createRandom + persist, which would OVERWRITE the persisted
+    // key on any transient read failure and orphan every past on-chain
+    // anchor. New behavior: surface the read error so the caller can
+    // retry or route the user through recovery. Anchoring is refused
+    // until the wallet is loadable.
+    await expect(getOrCreateWallet()).rejects.toThrow(
+      /Identity read failure/,
+    );
   });
 
-  it('returns the in-memory wallet even if secure-store write throws (best-effort persist)', async () => {
+  it('THROWS on secure-store persist failure during first-launch generate', async () => {
     (SecureStore.setItemAsync as jest.Mock).mockRejectedValueOnce(
       new Error('keychain full'),
     );
-    const wallet = await getOrCreateWallet();
-    // Wallet still usable for this session; the persist just didn't stick.
-    expect(wallet.address).toMatch(/^0x[0-9a-fA-F]{40}$/);
+    // Regression: previously we cached the fresh in-memory wallet even
+    // when persistence failed, so this session's anchor would go through
+    // — but the cold restart would generate a NEW wallet (empty keystore),
+    // orphaning the just-anchored record. Now we throw so the caller
+    // can prompt the user before anything gets anchored with an
+    // unpersisted key.
+    await expect(getOrCreateWallet()).rejects.toThrow(
+      /Identity persist failure/,
+    );
+  });
+
+  it('THROWS on parse failure of persisted key (does NOT overwrite the corrupt value)', async () => {
+    // Someone (attacker, or a corrupted keychain migration) wrote garbage
+    // into the secure-store key. The old code would generate a fresh
+    // wallet and OVERWRITE the garbage — permanently rotating identity
+    // without user consent. New code surfaces the error and refuses to
+    // overwrite, so the operator can investigate.
+    await SecureStore.setItemAsync(SECURE_KEY, 'not-a-hex-key');
+    await __resetIdentityForTests();
+    // Reset drops the cache — but our __resetForTests helper in setup
+    // also nukes the secure-store item, so put it back:
+    await SecureStore.setItemAsync(SECURE_KEY, 'not-a-hex-key');
+    await expect(getOrCreateWallet()).rejects.toThrow(
+      /Identity parse failure/,
+    );
+    // Assert the persisted key was NOT overwritten.
+    expect(await SecureStore.getItemAsync(SECURE_KEY)).toBe('not-a-hex-key');
   });
 
   it('two distinct installs generate DIFFERENT wallets (no shared demo key)', async () => {

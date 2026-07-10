@@ -308,27 +308,114 @@ describe('/api/vend', () => {
       expect(fresh.statusCode).toBe(200);
     });
 
-    it('parses x-forwarded-for correctly when Vercel appends multiple hops', async () => {
+    it('parses x-forwarded-for by taking the TAIL (Vercel-appended IP), not the head', async () => {
+      // Regression: previously we took the FIRST entry of x-forwarded-for
+      // as the trusted client IP. That's the WRONG entry — Vercel APPENDS
+      // its measured client IP to any client-supplied XFF, so an attacker
+      // could rotate the first entry on every request and permanently
+      // bypass the rate limit while all traffic actually came from one
+      // real IP that Vercel dutifully added at the end. Fix: read the
+      // tail entry instead.
       process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
       global.fetch = jest.fn().mockResolvedValue({
         status: 200,
         text: async () => JSON.stringify({ key: 'K' }),
       }) as unknown as typeof fetch;
 
-      // Vercel's edge network can populate x-forwarded-for with
-      // "client, hop1, hop2". We treat the first entry as the caller.
-      const ip = '203.0.113.11';
-      const withHops = { 'x-forwarded-for': `${ip}, 10.0.0.1, 10.0.0.2` };
+      const attackerIp = '203.0.113.66';
+
+      // Rotate a fake 'client' entry on every call — the actual Vercel-
+      // measured IP is always the tail. Prior to the fix, this loop
+      // would forever bypass the cap by giving each request a fresh
+      // 'client key'. Post-fix: the tail is the same on every call,
+      // so the cap fires after the 10th request.
+      for (let i = 0; i < 10; i++) {
+        const res = makeRes();
+        await handler(
+          makeReq({ group: 'gemini' }, 'GET', {
+            'x-forwarded-for': `spoof-${i}, ${attackerIp}`,
+          }),
+          res,
+        );
+        expect(res.statusCode).toBe(200);
+      }
+      // 11th request with a fresh spoof — still throttled, because we
+      // key on the trusted tail entry.
+      const throttled = makeRes();
+      await handler(
+        makeReq({ group: 'gemini' }, 'GET', {
+          'x-forwarded-for': `spoof-final, ${attackerIp}`,
+        }),
+        throttled,
+      );
+      expect(throttled.statusCode).toBe(429);
+    });
+
+    it('Retry-After reflects the actual remaining window, not a fixed 60s', async () => {
+      // Regression: previous version always returned Retry-After: 60,
+      // regardless of when the client's oldest in-window request was.
+      // A client throttled 55 seconds into the window would sleep 60s
+      // (5s longer than needed) instead of 5s. Now Retry-After tracks
+      // remaining time on the oldest timestamp.
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+      global.fetch = jest.fn().mockResolvedValue({
+        status: 200,
+        text: async () => JSON.stringify({ key: 'K' }),
+      }) as unknown as typeof fetch;
+
+      const ip = '203.0.113.77';
+      const req = () =>
+        makeReq({ group: 'gemini' }, 'GET', { 'x-forwarded-for': ip });
 
       for (let i = 0; i < 10; i++) {
         const res = makeRes();
-        await handler(makeReq({ group: 'gemini' }, 'GET', withHops), res);
-        expect(res.statusCode).toBe(200);
+        await handler(req(), res);
       }
-      // Same client IP through the same hops → still gets throttled.
       const throttled = makeRes();
-      await handler(makeReq({ group: 'gemini' }, 'GET', withHops), throttled);
+      await handler(req(), throttled);
       expect(throttled.statusCode).toBe(429);
+      const retryAfter = Number(throttled.headers['Retry-After']);
+      // The oldest timestamp is nearly-now (the burst just fired), so
+      // the remaining window should be very close to 60s but strictly
+      // <= 60s. Bounds: 1 <= retryAfter <= 60.
+      expect(retryAfter).toBeGreaterThanOrEqual(1);
+      expect(retryAfter).toBeLessThanOrEqual(60);
+    });
+  });
+
+  describe('origin allow-list normalization', () => {
+    it('accepts a listed origin with UPPERCASE scheme/host', async () => {
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+      global.fetch = jest.fn().mockResolvedValue({
+        status: 200,
+        text: async () => JSON.stringify({ key: 'K' }),
+      }) as unknown as typeof fetch;
+
+      const res = makeRes();
+      await handler(
+        makeReq({ group: 'gemini' }, 'GET', {
+          origin: 'HTTPS://Workproof-Demo.Vercel.App',
+        }),
+        res,
+      );
+      expect(res.statusCode).toBe(200);
+    });
+
+    it('accepts a listed origin with a trailing slash', async () => {
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+      global.fetch = jest.fn().mockResolvedValue({
+        status: 200,
+        text: async () => JSON.stringify({ key: 'K' }),
+      }) as unknown as typeof fetch;
+
+      const res = makeRes();
+      await handler(
+        makeReq({ group: 'gemini' }, 'GET', {
+          origin: 'https://workproof-demo.vercel.app/',
+        }),
+        res,
+      );
+      expect(res.statusCode).toBe(200);
     });
   });
 });

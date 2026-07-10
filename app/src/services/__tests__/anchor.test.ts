@@ -132,14 +132,14 @@ describe('anchorHash — config-missing → queue-only mode', () => {
     expect(result.txHash).toBe(`queued:${validHash}`);
     expect(result.explorerUrl).toBe('');
     expect(result.chainId).toBe(80002);
-    expect(await getQueue()).toEqual([validHash]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([validHash]);
   });
 
   it('two enqueues preserve FIFO order in the queue', async () => {
     const { anchorHash, getQueue } = importAnchor();
     await anchorHash(validHash);
     await anchorHash(anotherHash);
-    expect(await getQueue()).toEqual([validHash, anotherHash]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([validHash, anotherHash]);
   });
 
   it('deduplicates: re-anchoring the same hash does not grow the queue', async () => {
@@ -151,7 +151,7 @@ describe('anchorHash — config-missing → queue-only mode', () => {
     await anchorHash(validHash);
     await anchorHash(validHash);
     await anchorHash(validHash);
-    expect(await getQueue()).toEqual([validHash]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([validHash]);
   });
 });
 
@@ -175,7 +175,7 @@ describe('anchorHash — configured, on-chain success', () => {
   it('does NOT push to the queue on successful anchoring', async () => {
     const { anchorHash, getQueue } = importAnchor();
     await anchorHash(validHash);
-    expect(await getQueue()).toEqual([]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([]);
   });
 });
 
@@ -191,7 +191,7 @@ describe('anchorHash — configured, on-chain failure falls back to queue', () =
     const { anchorHash, getQueue } = importAnchor();
     const result = await anchorHash(validHash);
     expect(result.txHash).toBe(`queued:${validHash}`);
-    expect(await getQueue()).toEqual([validHash]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([validHash]);
   });
 
   it('on tx.wait() rejection, still queues + returns queued: id', async () => {
@@ -204,7 +204,7 @@ describe('anchorHash — configured, on-chain failure falls back to queue', () =
     const { anchorHash, getQueue } = importAnchor();
     const result = await anchorHash(validHash);
     expect(result.txHash).toBe(`queued:${validHash}`);
-    expect(await getQueue()).toEqual([validHash]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([validHash]);
   });
 });
 
@@ -214,13 +214,13 @@ describe('getQueue — corruption resilience', () => {
 
   it('returns [] when the queue key is missing', async () => {
     const { getQueue } = importAnchor();
-    expect(await getQueue()).toEqual([]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([]);
   });
 
   it('returns [] when the stored JSON is malformed', async () => {
     await AsyncStorage.setItem('@workproof/anchor-queue', '{{corrupt');
     const { getQueue } = importAnchor();
-    expect(await getQueue()).toEqual([]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([]);
   });
 
   it('returns [] when the stored value is not an array', async () => {
@@ -229,7 +229,7 @@ describe('getQueue — corruption resilience', () => {
       JSON.stringify({ garbage: true }),
     );
     const { getQueue } = importAnchor();
-    expect(await getQueue()).toEqual([]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([]);
   });
 });
 
@@ -274,7 +274,7 @@ describe('flushQueue', () => {
     const { flushQueue, getQueue } = importAnchor();
     expect(await flushQueue()).toEqual([]);
     // Queue untouched — flush is a no-op in unconfigured mode.
-    expect(await getQueue()).toEqual([validHash]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([validHash]);
   });
 
   it('returns [] when the queue is empty', async () => {
@@ -299,7 +299,7 @@ describe('flushQueue', () => {
     expect(results.map((r) => r.hashHex).sort()).toEqual(
       [validHash, anotherHash].sort(),
     );
-    expect(await getQueue()).toEqual([]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([]);
   });
 
   it('re-queues hashes whose on-chain submission failed', async () => {
@@ -321,7 +321,7 @@ describe('flushQueue', () => {
     expect(results).toHaveLength(1);
     expect(results[0].hashHex).toBe(validHash);
     // The failed hash is re-enqueued.
-    expect(await getQueue()).toEqual([anotherHash]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([anotherHash]);
   });
 
   it('re-queues hashes that fail assertValidHash mid-flush', async () => {
@@ -333,7 +333,7 @@ describe('flushQueue', () => {
     const { flushQueue, getQueue } = importAnchor();
     const results = await flushQueue();
     expect(results).toHaveLength(1);
-    expect(await getQueue()).toEqual(['not-a-valid-hash']);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual(['not-a-valid-hash']);
   });
 
   it('merge-dedupes: a failed hash re-queued during the network window does not double-list', async () => {
@@ -362,7 +362,7 @@ describe('flushQueue', () => {
     const results = await flushQueue();
     expect(results).toEqual([]);
     // Queue still has exactly one entry — no duplicates, no data loss.
-    expect(await getQueue()).toEqual([validHash]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([validHash]);
   });
 
   it('crash-safe: unprocessed items remain in the queue if the loop exits early', async () => {
@@ -394,7 +394,7 @@ describe('flushQueue', () => {
     expect(results).toHaveLength(1);
     expect(results[0].hashHex).toBe(validHash);
     // Second item failed → stays in queue for next flush retry.
-    expect(await getQueue()).toEqual([anotherHash]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([anotherHash]);
   });
 
   it('reconcile callback fires BEFORE the queue-remove step (crash-safe ordering)', async () => {
@@ -411,18 +411,21 @@ describe('flushQueue', () => {
       JSON.stringify([validHash]),
     );
     const { flushQueue, getQueue } = importAnchor();
-    let queueAtReconcile: string[] | null = null;
+    type QE = { hashHex: string };
+    let queueAtReconcile: QE[] | null = null;
     const reconcile = async (): Promise<void> => {
-      queueAtReconcile = await getQueue();
+      queueAtReconcile = (await getQueue()) as QE[];
     };
     const results = await flushQueue(reconcile);
     expect(results).toHaveLength(1);
     // At reconcile time, the hash was still in the queue (order: anchor →
     // reconcile → remove). This is the crash-safe ordering that prevents
     // the "anchored on-chain but stuck as queued locally" divergence.
-    expect(queueAtReconcile).toEqual([validHash]);
+    expect(
+      ((queueAtReconcile ?? []) as QE[]).map((e) => e.hashHex),
+    ).toEqual([validHash]);
     // After the whole flow, it's gone.
-    expect(await getQueue()).toEqual([]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([]);
   });
 
   it('reconcile failure leaves the hash in the queue for retry', async () => {
@@ -447,7 +450,7 @@ describe('flushQueue', () => {
     // The anchor DID succeed on-chain, so we still return it in results.
     expect(results).toHaveLength(1);
     // But the queue-remove step was skipped, so it's still there for retry.
-    expect(await getQueue()).toEqual([validHash]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([validHash]);
   });
 
   it('re-entrance guard: concurrent flushQueue calls share the same promise', async () => {
@@ -486,7 +489,7 @@ describe('flushQueue', () => {
     // Exactly 2 on-chain submissions, one per hash. Not 4.
     expect(anchorCalls).toBe(2);
     // Queue was drained.
-    expect(await getQueue()).toEqual([]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([]);
   });
 
   it('reconcile-attempt cap: after MAX_RECONCILE_ATTEMPTS the hash moves to dead-letter', async () => {
@@ -519,7 +522,7 @@ describe('flushQueue', () => {
     }
 
     // After the cap: hash left the queue, landed in dead-letter.
-    expect(await getQueue()).toEqual([]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([]);
     expect(await getDeadLetter()).toEqual([validHash]);
   });
 
@@ -546,16 +549,69 @@ describe('flushQueue', () => {
     };
 
     await flushQueue(flaky); // fails, bumps counter to 1, hash still in queue
-    expect(await getQueue()).toEqual([validHash]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([validHash]);
 
     await flushQueue(flaky); // succeeds, counter cleared, hash removed
-    expect(await getQueue()).toEqual([]);
+    expect((await getQueue()).map((e) => e.hashHex)).toEqual([]);
 
-    // Verify counter is cleared by reading the attempts key directly.
-    const rawAttempts = await AsyncStorage.getItem(
-      '@workproof/anchor-reconcile-attempts',
+    // Verify counter is cleared by reading the per-hash key directly.
+    // (Refactored to per-hash keys so one corrupt counter can't wipe others.)
+    const rawAttempt = await AsyncStorage.getItem(
+      `@workproof/anchor-reconcile-attempts:${validHash}`,
     );
-    const attempts = rawAttempts ? JSON.parse(rawAttempts) : {};
-    expect(attempts[validHash]).toBeUndefined();
+    expect(rawAttempt).toBeNull();
+  });
+
+  it('signer-mismatch: queued entry whose workerAddress differs from current wallet moves to dead-letter, is NOT anchored', async () => {
+    // Regression: a hash enqueued while offline captures the worker's
+    // wallet address at that moment. If the wallet later rotates
+    // (identity file rebuilt on a different install, migration, restore
+    // from backup), a subsequent flush must NOT sign with the NEW wallet
+    // — that would produce an on-chain Anchored event whose `worker`
+    // field doesn't match the WorkRecord's workerAddress, silently
+    // breaking the pdf-to-chain attribution.
+    mockConfigured = true;
+    let anchorCalls = 0;
+    mockAnchorImpl = async () => {
+      anchorCalls += 1;
+      return { hash: '0xok', wait: async () => undefined };
+    };
+    // Seed the queue with an entry whose expected signer is DIFFERENT
+    // from the mocked identity.getOrCreateWallet address ('0xworker').
+    await AsyncStorage.setItem(
+      '@workproof/anchor-queue',
+      JSON.stringify([
+        { hashHex: validHash, workerAddress: '0xdifferentwallet' },
+      ]),
+    );
+    const { flushQueue, getQueue, getDeadLetter } = importAnchor();
+    const results = await flushQueue();
+    // No on-chain submission — the guard fired before _anchorOnChain.
+    expect(anchorCalls).toBe(0);
+    expect(results).toEqual([]);
+    // Queue is empty (entry moved to dead-letter).
+    expect(await getQueue()).toEqual([]);
+    expect(await getDeadLetter()).toEqual([validHash]);
+  });
+
+  it('legacy bare-string queue entries still anchor (backward compat)', async () => {
+    // Records saved before the signer-binding schema change ship as
+    // bare 'a'.repeat(64) strings. getQueue normalizes them to
+    // { hashHex, workerAddress: '' }, and the signer-mismatch guard
+    // ignores empty workerAddress (no attribution to verify against).
+    mockConfigured = true;
+    let anchorCalls = 0;
+    mockAnchorImpl = async () => {
+      anchorCalls += 1;
+      return { hash: '0xok', wait: async () => undefined };
+    };
+    await AsyncStorage.setItem(
+      '@workproof/anchor-queue',
+      JSON.stringify([validHash]),
+    );
+    const { flushQueue } = importAnchor();
+    const results = await flushQueue();
+    expect(anchorCalls).toBe(1);
+    expect(results).toHaveLength(1);
   });
 });

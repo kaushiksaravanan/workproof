@@ -42,25 +42,60 @@ export async function getOrCreateWallet(): Promise<Wallet> {
 }
 
 async function _loadOrCreate(): Promise<Wallet> {
+  // Read the persisted key. Distinguish "no item" from "read/parse error":
+  //   - null           → first launch, generate + persist.
+  //   - valid hex key  → reuse; wallet identity is stable.
+  //   - throw          → transient (Keychain lock race, OS migration, disk),
+  //                      or someone/something wrote garbage to our key.
+  //     In BOTH cases we must NOT silently overwrite the persisted key with
+  //     a fresh one — that would orphan every past on-chain anchor made
+  //     from the previous wallet.
+  let existing: string | null = null;
   try {
-    const existing = await SecureStore.getItemAsync(SECURE_KEY);
-    if (existing) {
+    existing = await SecureStore.getItemAsync(SECURE_KEY);
+  } catch (err) {
+    // Read failure. Surface as a hard error rather than clobbering the key.
+    // The caller can retry (transient) or route the user through a recovery
+    // flow (persistent corruption).
+    throw new Error(
+      "Identity read failure: " +
+        (err instanceof Error ? err.message : String(err)) +
+        ". Refusing to rotate the wallet — this would orphan any past on-chain anchors.",
+    );
+  }
+
+  if (existing !== null) {
+    // Item exists. Try to construct the Wallet. If THIS throws, the item
+    // is unreadable garbage — again, DON'T overwrite it silently.
+    try {
       const w = new Wallet(existing);
       cachedWallet = w;
       return w;
+    } catch (err) {
+      throw new Error(
+        "Identity parse failure: " +
+          (err instanceof Error ? err.message : String(err)) +
+          ". Refusing to rotate the wallet — the persisted key is unreadable but present, which means overwriting it would orphan any past on-chain anchors made with the previous key.",
+      );
     }
-  } catch {
-    // Fall through to generate — secure-store read failures are rare but
-    // shouldn't crash the app. If persistence fails on write we still
-    // return the in-memory wallet.
   }
+
+  // No item present → genuine first launch. Generate + persist.
   const fresh = Wallet.createRandom();
-  cachedWallet = new Wallet(fresh.privateKey);
+  const freshKey = fresh.privateKey;
   try {
-    await SecureStore.setItemAsync(SECURE_KEY, fresh.privateKey);
+    await SecureStore.setItemAsync(SECURE_KEY, freshKey);
   } catch {
-    // ignored — see comment above
+    // Persist failure on first launch. Still return a usable wallet for
+    // this session, but do NOT cache it — a cold restart would find no
+    // key and generate another new one, so an anchor made now would be
+    // orphaned on the next launch. Surface an error so the caller can
+    // decide whether to proceed.
+    throw new Error(
+      "Identity persist failure on first launch — cannot save the fresh wallet. Anchoring is unsafe until the OS keystore is writable.",
+    );
   }
+  cachedWallet = new Wallet(freshKey);
   return cachedWallet;
 }
 

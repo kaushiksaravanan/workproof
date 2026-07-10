@@ -51,14 +51,21 @@ const ALLOWED_ORIGINS = (
   "https://workproof-demo.vercel.app,http://localhost:8081,http://localhost:19006"
 )
   .split(",")
-  .map((o: string) => o.trim())
+  .map((o: string) => normalizeOrigin(o.trim()))
   .filter(Boolean);
+
+function normalizeOrigin(origin: string): string {
+  // Lowercase (RFC 3986 scheme/host case-insensitive), drop trailing slash.
+  // Bare origins don't have a path so trailing slash shouldn't appear, but
+  // clients occasionally send it — accept both shapes as equivalent.
+  return origin.toLowerCase().replace(/\/$/, "");
+}
 
 function isOriginAllowed(req: VercelRequest): boolean {
   const originHeader = req.headers?.origin;
-  const origin = Array.isArray(originHeader) ? originHeader[0] : originHeader;
-  if (origin) {
-    return ALLOWED_ORIGINS.includes(origin);
+  const raw = Array.isArray(originHeader) ? originHeader[0] : originHeader;
+  if (raw) {
+    return ALLOWED_ORIGINS.includes(normalizeOrigin(raw));
   }
   // No Origin header — treat as native. Real Expo Go / APK builds do NOT
   // send Origin. Browsers ALWAYS send Origin on cross-origin fetches. So
@@ -93,6 +100,12 @@ const RATE_LIMIT_MAX_TRACKED = 10_000;
 
 const rateLimitState = new Map<string, number[]>();
 
+// Per-warm-instance salt for callers we can't identify (no XFF, no
+// x-real-ip). Callers sharing the same 'unknown' bucket would amplify
+// each other's request budget; salting bounds the damage to this warm
+// instance's lifetime.
+const unknownSalt = Math.random().toString(36).slice(2);
+
 function pruneExpired(key: string, now: number): void {
   const timestamps = rateLimitState.get(key);
   if (!timestamps) return;
@@ -105,25 +118,47 @@ function pruneExpired(key: string, now: number): void {
 }
 
 function clientKey(req: VercelRequest): string {
+  // Vercel appends its measured client IP to any client-supplied
+  // x-forwarded-for header, so the TRUSTED entry is the LAST one, not
+  // the first. Reading position 0 (as the naive approach does) lets an
+  // attacker rotate x-forwarded-for on every request to bypass the
+  // rate limit. Take the tail entry instead.
   const xff = req.headers?.["x-forwarded-for"];
-  const forwarded = Array.isArray(xff) ? xff[0] : xff;
+  const forwarded = Array.isArray(xff) ? xff[xff.length - 1] : xff;
   if (forwarded) {
-    // First IP in the chain is the original client per RFC 7239 convention;
-    // Vercel populates this before invoking the handler.
-    const first = forwarded.split(",")[0]?.trim();
-    if (first) return first;
+    const parts = forwarded
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const trusted = parts[parts.length - 1];
+    if (trusted) return trusted;
   }
   const real = req.headers?.["x-real-ip"];
   const realStr = Array.isArray(real) ? real[0] : real;
-  return realStr ?? "unknown";
+  if (realStr) return realStr;
+  // No trustworthy IP identifier at all. Do NOT let all such callers
+  // share the same 'unknown' bucket — that would let an attacker with a
+  // spoofed header amplify the un-rate-limited traffic. Salt the key with
+  // a random-per-instance token so the bucket is at least unique per
+  // warm instance; still not ideal, but not a shared vector either.
+  return `unknown-${unknownSalt}`;
 }
 
-function rateLimit(req: VercelRequest, now: number = Date.now()): boolean {
+function rateLimit(
+  req: VercelRequest,
+  now: number = Date.now(),
+): { ok: true } | { ok: false; retryAfterSec: number } {
   const key = clientKey(req);
   pruneExpired(key, now);
   const timestamps = rateLimitState.get(key) ?? [];
   if (timestamps.length >= RATE_LIMIT_MAX) {
-    return false;
+    // Client is capped. Retry-After = the remaining window on the OLDEST
+    // in-window timestamp (rounded up to whole seconds). Once that ages
+    // out, they get one slot back.
+    const oldest = timestamps[0];
+    const remainingMs = Math.max(0, RATE_LIMIT_WINDOW_MS - (now - oldest));
+    const retryAfterSec = Math.max(1, Math.ceil(remainingMs / 1000));
+    return { ok: false, retryAfterSec };
   }
   timestamps.push(now);
   rateLimitState.set(key, timestamps);
@@ -136,7 +171,7 @@ function rateLimit(req: VercelRequest, now: number = Date.now()): boolean {
     if (firstKey === undefined) break;
     rateLimitState.delete(firstKey);
   }
-  return true;
+  return { ok: true };
 }
 
 /** Test-only: clear the in-memory rate limit state between tests. */
@@ -160,8 +195,9 @@ export default async function handler(
     return;
   }
 
-  if (!rateLimit(req)) {
-    res.setHeader("Retry-After", String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)));
+  const rate = rateLimit(req);
+  if (!rate.ok) {
+    res.setHeader("Retry-After", String(rate.retryAfterSec));
     res.status(429).json({ error: "rate limit exceeded" });
     return;
   }

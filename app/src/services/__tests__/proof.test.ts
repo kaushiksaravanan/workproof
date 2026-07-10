@@ -190,6 +190,23 @@ describe('buildProofHtml — amounts + date', () => {
   });
 });
 
+describe('buildProofHtml — worker attribution', () => {
+  it('renders workerAddress as a labelled hash block when present', () => {
+    // Regression: the PDF's whole trust story is 'the on-chain Anchored
+    // event's `worker` field equals this address'. If the PDF doesn't
+    // print the address, the verifier has no way to check that.
+    const addr = '0xabcd0123456789abcd0123456789abcd01234567';
+    const html = buildProofHtml(record({ workerAddress: addr }));
+    expect(html).toContain('Anchored by');
+    expect(html).toContain(addr);
+  });
+
+  it('omits the worker section entirely when workerAddress is undefined', () => {
+    const html = buildProofHtml(record({ workerAddress: undefined }));
+    expect(html).not.toContain('Anchored by');
+  });
+});
+
 describe('generateProofPdf', () => {
   beforeEach(() => {
     mockPrintFile.mockClear();
