@@ -444,4 +444,43 @@ describe('flushQueue', () => {
     // But the queue-remove step was skipped, so it's still there for retry.
     expect(await getQueue()).toEqual([validHash]);
   });
+
+  it('re-entrance guard: concurrent flushQueue calls share the same promise', async () => {
+    // Regression: without the flushInFlight guard, App.tsx's initial hydrate
+    // IIFE and the AppState 'active' listener can both invoke flushQueue
+    // during a slow drain. Both would snapshot the SAME items (queue-remove
+    // happens AFTER each on-chain confirm), _anchorOnChain each of them
+    // twice, and pay gas twice per proof. The guard collapses concurrent
+    // callers onto a single in-flight promise.
+    mockConfigured = true;
+    let anchorCalls = 0;
+    mockAnchorImpl = async () => {
+      anchorCalls += 1;
+      // Simulate a slow tx.wait() so the second flushQueue call arrives
+      // mid-drain.
+      await new Promise((r) => setTimeout(r, 20));
+      return { hash: `0xok${anchorCalls}`, wait: async () => undefined };
+    };
+    await AsyncStorage.setItem(
+      '@workproof/anchor-queue',
+      JSON.stringify([validHash, anotherHash]),
+    );
+    const { flushQueue, getQueue } = importAnchor();
+
+    // Fire two concurrent flushQueue calls. They must resolve to the SAME
+    // result object (shared promise) and _anchorOnChain must fire exactly
+    // once per hash (2 calls total, not 4).
+    const [resultsA, resultsB] = await Promise.all([
+      flushQueue(),
+      flushQueue(),
+    ]);
+
+    // Same reference — both callers got the same in-flight promise.
+    expect(resultsA).toBe(resultsB);
+    expect(resultsA).toHaveLength(2);
+    // Exactly 2 on-chain submissions, one per hash. Not 4.
+    expect(anchorCalls).toBe(2);
+    // Queue was drained.
+    expect(await getQueue()).toEqual([]);
+  });
 });

@@ -229,7 +229,38 @@ export async function getAnchorStatus(txHash: string): Promise<AnchorStatus> {
  * Returns the list of successful anchor results paired with the originating
  * hash. Failed hashes stay in the queue for a future flush.
  */
+// ---------------------------------------------------------------------------
+// Flush in-flight guard — flushQueue is called from multiple places (App
+// mount effect + every AppState 'active' event). Without this, a slow drain
+// on cold launch + a foreground bounce during it would cause two concurrent
+// flushQueue calls to both snapshot the same [h1,h2,h3] (queue-remove happens
+// AFTER each on-chain confirm), both call _anchorOnChain on every hash, and
+// the app would submit every queued hash TWICE on-chain (real gas cost on
+// mainnet, wasted testnet gas, two Anchored events per proof).
+//
+// Concurrent callers share the same promise. When it settles, the guard
+// clears so a subsequent foreground bounce can start a fresh flush of any
+// items that arrived during the previous drain.
+// ---------------------------------------------------------------------------
+
+let flushInFlight: Promise<
+  Array<{ hashHex: string; result: AnchorResult }>
+> | null = null;
+
 export async function flushQueue(
+  reconcile?: (
+    hashHex: string,
+    result: AnchorResult,
+  ) => Promise<void>,
+): Promise<Array<{ hashHex: string; result: AnchorResult }>> {
+  if (flushInFlight) return flushInFlight;
+  flushInFlight = _flushQueue(reconcile).finally(() => {
+    flushInFlight = null;
+  });
+  return flushInFlight;
+}
+
+async function _flushQueue(
   reconcile?: (
     hashHex: string,
     result: AnchorResult,

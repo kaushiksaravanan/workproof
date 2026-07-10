@@ -604,7 +604,11 @@ export function ProofDetail({
             // separately. Children stay unflagged so the parent wins.
           >
             {chunkHash(record.hash).map((chunk, i) => (
-              <Text key={i} style={styles.hashChunk}>
+              // selectable enables native long-press → Copy through the OS
+              // action menu on both iOS and Android — without pulling in an
+              // extra Clipboard dependency. Users can now actually copy the
+              // 64-char hash instead of hand-transcribing from the screen.
+              <Text key={i} style={styles.hashChunk} selectable>
                 {chunk}
               </Text>
             ))}

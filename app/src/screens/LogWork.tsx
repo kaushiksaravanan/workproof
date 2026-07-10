@@ -27,6 +27,7 @@ import {
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { Audio } from 'expo-av';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as FileSystem from 'expo-file-system/legacy';
 import { v4 as uuidv4 } from 'uuid';
 
 import {
@@ -542,6 +543,16 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
       if (r) {
         // best-effort cleanup; ignore errors
         r.stopAndUnloadAsync().catch(() => {});
+        // Restore the iOS audio session out of recording mode — matches
+        // what the happy-path stopRecording does. Without this, dismissing
+        // the sheet mid-recording (or an OS interruption like a phone call)
+        // leaves allowsRecordingIOS=true and subsequent AudioPlayer.playAsync
+        // routes through the earpiece instead of the speaker on some iOS
+        // device configs.
+        Audio.setAudioModeAsync({
+          allowsRecordingIOS: false,
+          playsInSilentModeIOS: true,
+        }).catch(() => {});
       }
       // Stop the save swoosh too so its end-callback can't navigate from a
       // dead screen (mountedRef gates that path, but cancelling is cleaner).
@@ -750,6 +761,15 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
     savingRef.current = true;
     setPhase('saving');
 
+    // Track persisted URIs across the try/catch so the failure path can
+    // clean up media files that got copied into the doc dir before the
+    // hash or upsert step threw. Without this, every failed Save leaks
+    // one photo (+ optional audio) into `${documentDirectory}workproof/`
+    // permanently — a slow disk-space leak on retry-heavy sessions.
+    let persistedPhotoUri: string | undefined;
+    let persistedAudioUri: string | undefined;
+    let saved = false;
+
     try {
       // expo-camera / expo-av write into the OS cache, which can be evicted
       // at any time. Copy both into the app's document directory FIRST so the
@@ -758,8 +778,8 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
       // that will exist long-term (they're identical, but this keeps the
       // canonical recipe self-consistent if a future copy step rewrites the
       // file — e.g. transcoding).
-      const persistedPhotoUri = await media.ensureCopy(photoUri);
-      const persistedAudioUri = audioUri
+      persistedPhotoUri = await media.ensureCopy(photoUri);
+      persistedAudioUri = audioUri
         ? await media.ensureCopy(audioUri)
         : undefined;
       const photoBytes = await media.readBytes(persistedPhotoUri);
@@ -788,6 +808,7 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
       // ProofDetail entry.
       await useWorkStore.getState().upsert(finalRecord);
       if (!mountedRef.current) return;
+      saved = true;
 
       // Confirm to assistive tech, then run the swoosh + navigate.
       AccessibilityInfo.announceForAccessibility('Proof saved');
@@ -820,6 +841,22 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
         setPhase('review');
       }
     } finally {
+      // Clean up orphaned media if save failed after ensureCopy. Only
+      // fires when we copied files into the doc dir but never persisted a
+      // record pointing at them — otherwise every retry would leak one
+      // photo (+ optional audio) into `${documentDirectory}workproof/`.
+      if (!saved) {
+        if (persistedPhotoUri) {
+          FileSystem.deleteAsync(persistedPhotoUri, { idempotent: true }).catch(
+            () => {},
+          );
+        }
+        if (persistedAudioUri) {
+          FileSystem.deleteAsync(persistedAudioUri, { idempotent: true }).catch(
+            () => {},
+          );
+        }
+      }
       savingRef.current = false;
     }
   }, [
@@ -878,7 +915,11 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
         },
         helper: {
           ...theme.typography.body,
-          color: theme.colors.mutedForeground,
+          // peggyInk on the page-gray surface (#E3E3E3) gives 12.6:1 —
+          // well above WCAG AA. Was mutedForeground (#6B7280) → 3.13:1
+          // which failed AA for normal-size body text (4.5:1 required),
+          // including the live-region 'Add the work type to save' error.
+          color: theme.colors.peggyInk,
           marginTop: theme.spacing.md,
           textAlign: 'center',
         },
