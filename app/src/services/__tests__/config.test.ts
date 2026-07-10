@@ -46,15 +46,16 @@ describe('services/config.ts — env var read-throughs (shape)', () => {
     expect('CIPHERSTACK_TOKEN' in cfg).toBe(false);
   });
 
-  it('HACKATHON_DEMO_KEY has the shape string | undefined', () => {
+  it('does NOT export HACKATHON_DEMO_KEY — signing key is per-install now', () => {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const cfg = require('../config') as {
-      HACKATHON_DEMO_KEY: string | undefined;
-    };
-    expect(
-      cfg.HACKATHON_DEMO_KEY === undefined ||
-        typeof cfg.HACKATHON_DEMO_KEY === 'string',
-    ).toBe(true);
+    const cfg = require('../config') as Record<string, unknown>;
+    // Regression: the previous version exported HACKATHON_DEMO_KEY read from
+    // EXPO_PUBLIC_HACKATHON_KEY, bundling a shared demo wallet key into the
+    // APK. Task #33 replaced it with services/identity.ts (a fresh
+    // secp256k1 wallet generated per install and stored in
+    // expo-secure-store). No shared signing key should ship in the bundle.
+    expect(cfg.HACKATHON_DEMO_KEY).toBeUndefined();
+    expect('HACKATHON_DEMO_KEY' in cfg).toBe(false);
   });
 
   it('ANCHOR_CONTRACT_ADDRESS has the shape string | undefined', () => {

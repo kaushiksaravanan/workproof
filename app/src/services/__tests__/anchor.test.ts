@@ -32,9 +32,6 @@ jest.mock('../config', () => ({
   get POLYGON_AMOY_CHAIN_ID() {
     return 80002;
   },
-  get HACKATHON_DEMO_KEY() {
-    return mockConfigured ? '0x' + '11'.repeat(32) : undefined;
-  },
   get ANCHOR_CONTRACT_ADDRESS() {
     return mockConfigured
       ? '0xabcdefabcdefabcdefabcdefabcdefabcdefabcd'
@@ -42,12 +39,20 @@ jest.mock('../config', () => ({
   },
 }));
 
+// The per-install identity wallet. Anchor pulls this via getOrCreateWallet
+// and calls .connect(provider) on it — so the mocked wallet needs .connect
+// to return something Contract can be constructed with (any truthy value
+// works because Contract is also mocked below).
+jest.mock('../identity', () => ({
+  getOrCreateWallet: jest.fn(async () => ({
+    address: '0xworker',
+    connect: (_provider: unknown) => ({ address: '0xworker' }),
+  })),
+}));
+
 jest.mock('ethers', () => ({
   JsonRpcProvider: jest.fn().mockImplementation(() => ({
     getTransactionReceipt: (h: string) => mockReceiptForTx(h),
-  })),
-  Wallet: jest.fn().mockImplementation((_pk: string, _provider: unknown) => ({
-    address: '0xwallet',
   })),
   Contract: jest.fn().mockImplementation(() => ({
     anchor: (h: unknown) => mockAnchorImpl(h),

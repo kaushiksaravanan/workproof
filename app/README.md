@@ -52,17 +52,16 @@ If you accidentally tap "Deny", clear permissions in **Settings → Apps → Exp
 
 The mobile app does not require any environment variables to run the demo. Everything is on-device.
 
-For LLM-backed field extraction (`services/llm.ts`), the code can vend Gemini keys from CipherStack. **This path is present but not wired to any user action in the shipping app** — `LogWork.tsx` hard-codes `online: false` on the extraction call so the regex baseline runs instead. If you want to experiment with the Gemini path, remove that flag and copy `.env.example` to `.env` with:
+For LLM-backed field extraction (`services/llm.ts`), the code can vend Gemini keys from the Vercel serverless `/api/vend` proxy. **This path is present but not wired to any user action in the shipping app** — `LogWork.tsx` hard-codes `online: false` on the extraction call so the regex baseline runs instead. If you want to experiment with the Gemini path, remove that flag and set the vend base URL in `.env`:
 
 ```bash
-EXPO_PUBLIC_CIPHERSTACK_TOKEN=csk_your_service_token_here
-EXPO_PUBLIC_HACKATHON_KEY=0xabcdef...           # any hex private key for signing
+EXPO_PUBLIC_API_VEND_BASE_URL=https://workproof-demo.vercel.app
 EXPO_PUBLIC_ANCHOR_ADDRESS=0x0000...            # Polygon Amoy anchor contract
 ```
 
-`EXPO_PUBLIC_*` is the only prefix Expo exposes to the client at build time. Anything without that prefix is invisible to the running app — that's intentional.
+`EXPO_PUBLIC_*` is the only prefix Expo exposes to the client at build time. Anything without that prefix is invisible to the running app — that's intentional. **No runtime secrets ship in `EXPO_PUBLIC_*` anymore.** The CipherStack service token lives only in the Vercel serverless env (`CIPHERSTACK_TOKEN`, no `EXPO_PUBLIC_` prefix); the anchor signing key is generated per-install and persisted in `expo-secure-store` (Keychain on iOS, EncryptedSharedPreferences on Android). See `services/identity.ts`.
 
-**Native-bundle caveat.** `EXPO_PUBLIC_*` values are inlined into the shipped bundle and are extractable from the APK. For production, put long-lived secrets behind a server-side proxy (see the Vercel section below for the pattern).
+**Native-bundle caveat.** `EXPO_PUBLIC_*` values are inlined into the shipped bundle and are extractable from the APK — treat them as public. The two variables above are non-secret: a Vercel URL (the /api/vend proxy handles origin allow-listing) and a testnet contract address.
 
 ## Deploying the web build to Vercel
 
@@ -117,7 +116,7 @@ This is the tour you give a stakeholder. It hits every primitive without dwellin
 3. **0:15 — Take the photo.** Big shutter. One tap. Photo locks into the bundle and the screen flips to the voice-memo step.
 4. **0:25 — Record the voice memo.** Hold-to-record. Say something like "Replaced the kitchen sink trap, ran water for two minutes, no leaks." Release to stop. The waveform settles.
 5. **0:40 — Type the short transcript.** The review step in `LogWork` shows the editable transcript on the notebook-paper surface. Type (or paste) the report and tap Use this — the regex extractor fills work type / client / amounts from known patterns. Edit inline to fix a job number or customer name.
-6. **0:55 — Save the proof.** Tap "Save proof". Under the hood, `expo-crypto` SHA-256 hashes the canonical record (fields + photo hash + audio hash). If an anchor contract address is configured, the hash is submitted to Polygon Amoy via ethers.js — the demo wallet signs the tx.
+6. **0:55 — Save the proof.** Tap "Save proof". Under the hood, `expo-crypto` SHA-256 hashes the canonical record (fields + photo hash + audio hash + this install's worker address). If an anchor contract address is configured, the hash is submitted to Polygon Amoy via ethers.js — the per-install wallet (generated on first launch, stored in `expo-secure-store`) signs the tx, so the on-chain `Anchored(hash, worker, timestamp)` event's `worker` field attributes the proof back to this specific install.
 7. **1:10 — Export the PDF.** `expo-print` renders a one-pager with the photo, transcript, location, content hash, and (if anchored) a Polygonscan link to the anchor tx. Tap **Share**.
 8. **1:25 — Send via WhatsApp / email.** The native share sheet opens. Pick a contact. The PDF lands on the homeowner's phone within seconds.
 9. **1:30 — Done.** Close the loop: "That's the artifact. Anyone with the PDF can re-verify the hash later — recompute SHA-256 of the canonical bundle, check it matches the on-chain anchor. The crew never had to leave Expo Go."

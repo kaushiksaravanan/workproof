@@ -13,15 +13,15 @@
  * window.
  */
 
-import { JsonRpcProvider, Wallet, Contract, getBytes } from "ethers";
+import { JsonRpcProvider, Contract, getBytes } from "ethers";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
 import type { AnchorResult, AnchorStatus } from "../types";
 import { QUEUED_TX_PREFIX, makeQueuedTxId } from "../utils/record";
+import { getOrCreateWallet } from "./identity";
 import {
   POLYGON_AMOY_RPC,
   POLYGON_AMOY_CHAIN_ID,
-  HACKATHON_DEMO_KEY,
   ANCHOR_CONTRACT_ADDRESS,
 } from "./config";
 
@@ -190,17 +190,16 @@ async function enqueueHash(hashHex: string): Promise<void> {
 }
 
 /**
- * Submit a hash on-chain. Caller MUST have validated `hashHex` and confirmed
- * config is available — this helper does NOT enqueue on missing config.
- * Used by both `anchorHash` and `flushQueue` to avoid the double-enqueue
- * regression where flushQueue re-pushed every hash it processed.
+ * Submit a hash on-chain using this install's per-install wallet. Caller
+ * MUST have validated `hashHex` and confirmed contract config is available —
+ * this helper does NOT enqueue on missing config.
  *
  * Concurrency: routed through `submitLock` so concurrent callers don't race
- * on the demo wallet's pending nonce.
+ * on the per-install wallet's pending nonce.
  */
 async function _anchorOnChain(hashHex: string): Promise<AnchorResult> {
   return withSubmitLock(async () => {
-    const wallet = new Wallet(HACKATHON_DEMO_KEY as string, provider());
+    const wallet = (await getOrCreateWallet()).connect(provider());
     const contract = new Contract(
       ANCHOR_CONTRACT_ADDRESS as string,
       ANCHOR_ABI,
@@ -219,14 +218,14 @@ async function _anchorOnChain(hashHex: string): Promise<AnchorResult> {
 /**
  * Anchor a hex-encoded SHA-256 hash on-chain.
  *
- * If the contract address or demo signing key is missing, OR if the on-chain
- * submission fails (offline, RPC timeout, chain congestion), the hash is
- * queued locally and a synthetic `queued:<hash>` tx id is returned. Callers
+ * If the contract address is missing, OR if the on-chain submission fails
+ * (offline, RPC timeout, chain congestion), the hash is queued locally and
+ * a synthetic `queued:<hash>` tx id is returned. Callers
  * can rely on `flushQueue` to drain the backlog later.
  */
 export async function anchorHash(hashHex: string): Promise<AnchorResult> {
   assertValidHash(hashHex);
-  if (!ANCHOR_CONTRACT_ADDRESS || !HACKATHON_DEMO_KEY) {
+  if (!ANCHOR_CONTRACT_ADDRESS) {
     await enqueueHash(hashHex);
     return {
       txHash: makeQueuedTxId(hashHex),
@@ -330,7 +329,7 @@ async function _flushQueue(
     result: AnchorResult,
   ) => Promise<void>,
 ): Promise<Array<{ hashHex: string; result: AnchorResult }>> {
-  if (!ANCHOR_CONTRACT_ADDRESS || !HACKATHON_DEMO_KEY) {
+  if (!ANCHOR_CONTRACT_ADDRESS) {
     return [];
   }
 

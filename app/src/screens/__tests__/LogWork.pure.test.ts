@@ -205,6 +205,7 @@ describe('buildDraftRecord — canonical draft assembly', () => {
     photoUri: 'file:///doc/workproof/photo.jpg',
     audioUri: 'file:///doc/workproof/audio.m4a' as string | undefined,
     transcript: 'did the wall',
+    workerAddress: '0x1111111111111111111111111111111111111111',
   };
 
   it('assembles the canonical shape with all fields present', () => {
@@ -213,6 +214,7 @@ describe('buildDraftRecord — canonical draft assembly', () => {
       id: 'test-id-1',
       createdAt: '2026-01-01T00:00:00.000Z',
       workerName: 'Ravi Kumar',
+      workerAddress: '0x1111111111111111111111111111111111111111',
       workType: 'plastering',
       clientName: 'Sharma',
       location: 'Andheri',

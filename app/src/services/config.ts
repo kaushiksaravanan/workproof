@@ -27,8 +27,5 @@ export const POLYGON_AMOY_RPC = "https://rpc-amoy.polygon.technology";
 /** Polygon Amoy testnet chain id. */
 export const POLYGON_AMOY_CHAIN_ID = 80002;
 
-/** Hackathon demo signing key, injected at build time. Public-bundle caveat. */
-export const HACKATHON_DEMO_KEY = process.env.EXPO_PUBLIC_HACKATHON_KEY;
-
 /** Deployed anchor contract address on Polygon Amoy. */
 export const ANCHOR_CONTRACT_ADDRESS = process.env.EXPO_PUBLIC_ANCHOR_ADDRESS;

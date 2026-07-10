@@ -42,6 +42,7 @@ import { useReducedMotion } from '../theme/useReducedMotion';
 import { useWorkStore } from '../state/workStore';
 import { extractWorkFields } from '../services/llm';
 import { hashRecord } from '../services/hashing';
+import { getOrCreateWallet } from '../services/identity';
 import * as media from '../services/media';
 import type { ExtractedFields, WorkRecord } from '../types';
 import type { RootStackParamList } from '../navigation/types';
@@ -140,11 +141,13 @@ function buildDraftRecord(args: {
   photoUri: string;
   audioUri: string | undefined;
   transcript: string;
+  workerAddress: string;
 }): WorkRecord {
   return {
     id: args.id,
     createdAt: args.createdAt,
     workerName: args.fields.workerName || undefined,
+    workerAddress: args.workerAddress,
     workType: args.fields.workType,
     clientName: args.fields.clientName || undefined,
     location: args.fields.location || undefined,
@@ -788,6 +791,12 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
         : undefined;
       const id = uuidv4();
       const createdAt = new Date().toISOString();
+      // Bind the per-install wallet's address into the record before
+      // hashing so the canonical hash commits to WHO the worker is, not
+      // just WHAT the work was. The on-chain Anchored event's `worker`
+      // field will match this address, and a verifier can cross-check.
+      const workerWallet = await getOrCreateWallet();
+      if (!mountedRef.current) return;
       const draft = buildDraftRecord({
         id,
         createdAt,
@@ -797,6 +806,7 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
         photoUri: persistedPhotoUri,
         audioUri: persistedAudioUri,
         transcript,
+        workerAddress: workerWallet.address,
       });
       const hash = await hashRecord(draft, photoBytes, audioBytes);
       if (!mountedRef.current) return;

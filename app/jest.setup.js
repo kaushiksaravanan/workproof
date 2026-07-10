@@ -105,3 +105,23 @@ jest.mock('@expo-google-fonts/fraunces', () => ({
 jest.mock('@react-native-async-storage/async-storage', () =>
   require('@react-native-async-storage/async-storage/jest/async-storage-mock')
 );
+
+// Mock expo-secure-store with a shared in-memory backing store so tests
+// exercise the real code paths without pulling in the native module.
+jest.mock('expo-secure-store', () => {
+  const store = new Map();
+  return {
+    getItemAsync: jest.fn(async (key) =>
+      store.has(key) ? store.get(key) : null,
+    ),
+    setItemAsync: jest.fn(async (key, value) => {
+      store.set(key, value);
+    }),
+    deleteItemAsync: jest.fn(async (key) => {
+      store.delete(key);
+    }),
+    // Expose the internal map so tests can clear it between runs. This is
+    // a test-only escape hatch matching the pattern in useHaptics.
+    __resetForTests: () => store.clear(),
+  };
+});

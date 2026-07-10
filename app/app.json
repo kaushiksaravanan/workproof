@@ -48,7 +48,8 @@
         {
           "microphonePermission": "Allow WorkProof to access your microphone for voice reports."
         }
-      ]
+      ],
+      "expo-secure-store"
     ]
   }
 }
