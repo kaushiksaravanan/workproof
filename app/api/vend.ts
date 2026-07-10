@@ -69,6 +69,81 @@ function isOriginAllowed(req: VercelRequest): boolean {
   return true;
 }
 
+// ---------------------------------------------------------------------------
+// Per-IP rate limit (in-memory, per Vercel serverless instance).
+//
+// Vercel serverless functions are stateless between cold starts, but a warm
+// instance reuses module-level state across invocations. This gives us a
+// cheap first-line-of-defense against naive abuse: one machine curling
+// /api/vend in a tight loop hits the limit within a warm instance's
+// lifetime. A distributed attacker across many IPs bypasses this — full
+// mitigation needs Vercel KV / Upstash Redis with cross-instance state.
+// Tracked as follow-up work on task #32.
+// ---------------------------------------------------------------------------
+
+const RATE_LIMIT_MAX = Number(process.env.VEND_RATE_LIMIT_MAX ?? "10");
+const RATE_LIMIT_WINDOW_MS = Number(
+  process.env.VEND_RATE_LIMIT_WINDOW_MS ?? "60000",
+);
+
+// LRU-ish: at most 10k IPs tracked. Older entries drop off when the map
+// exceeds this — a single hot IP can't push out unrelated slow callers
+// because we prune expired entries first.
+const RATE_LIMIT_MAX_TRACKED = 10_000;
+
+const rateLimitState = new Map<string, number[]>();
+
+function pruneExpired(key: string, now: number): void {
+  const timestamps = rateLimitState.get(key);
+  if (!timestamps) return;
+  const kept = timestamps.filter((t) => now - t < RATE_LIMIT_WINDOW_MS);
+  if (kept.length === 0) {
+    rateLimitState.delete(key);
+  } else {
+    rateLimitState.set(key, kept);
+  }
+}
+
+function clientKey(req: VercelRequest): string {
+  const xff = req.headers?.["x-forwarded-for"];
+  const forwarded = Array.isArray(xff) ? xff[0] : xff;
+  if (forwarded) {
+    // First IP in the chain is the original client per RFC 7239 convention;
+    // Vercel populates this before invoking the handler.
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+  const real = req.headers?.["x-real-ip"];
+  const realStr = Array.isArray(real) ? real[0] : real;
+  return realStr ?? "unknown";
+}
+
+function rateLimit(req: VercelRequest, now: number = Date.now()): boolean {
+  const key = clientKey(req);
+  pruneExpired(key, now);
+  const timestamps = rateLimitState.get(key) ?? [];
+  if (timestamps.length >= RATE_LIMIT_MAX) {
+    return false;
+  }
+  timestamps.push(now);
+  rateLimitState.set(key, timestamps);
+
+  // Bound total tracked entries so a burst of unique IPs can't grow the
+  // map unbounded. Trim least-recently-touched entries (Map preserves
+  // insertion order; delete the oldest keys until under the cap).
+  while (rateLimitState.size > RATE_LIMIT_MAX_TRACKED) {
+    const firstKey = rateLimitState.keys().next().value;
+    if (firstKey === undefined) break;
+    rateLimitState.delete(firstKey);
+  }
+  return true;
+}
+
+/** Test-only: clear the in-memory rate limit state between tests. */
+export function __resetRateLimitForTests(): void {
+  rateLimitState.clear();
+}
+
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse,
@@ -82,6 +157,12 @@ export default async function handler(
 
   if (!isOriginAllowed(req)) {
     res.status(403).json({ error: "origin not allowed" });
+    return;
+  }
+
+  if (!rateLimit(req)) {
+    res.setHeader("Retry-After", String(Math.ceil(RATE_LIMIT_WINDOW_MS / 1000)));
+    res.status(429).json({ error: "rate limit exceeded" });
     return;
   }
 

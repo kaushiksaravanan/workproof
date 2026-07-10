@@ -5,7 +5,7 @@
  * and a stubbed global fetch, so no network / no CipherStack round-trip.
  */
 
-import handler from '../vend';
+import handler, { __resetRateLimitForTests } from '../vend';
 
 type FakeRes = {
   statusCode: number | null;
@@ -56,6 +56,10 @@ afterEach(() => {
   else process.env.CIPHERSTACK_TOKEN = ORIGINAL_ENV;
   global.fetch = ORIGINAL_FETCH;
   jest.restoreAllMocks();
+  // Clear the in-memory rate-limit state between tests. Otherwise a test
+  // that fires 11 requests to trigger the cap leaves poison state that
+  // fails unrelated later tests.
+  __resetRateLimitForTests();
 });
 
 describe('/api/vend', () => {
@@ -245,6 +249,86 @@ describe('/api/vend', () => {
       // Native Expo Go / APK builds do not send Origin. Simulate that.
       await handler(makeReq({ group: 'gemini' }, 'GET'), res);
       expect(res.statusCode).toBe(200);
+    });
+  });
+
+  describe('per-IP rate limit', () => {
+    it('allows requests up to the cap, then 429s the (cap+1)th within the window', async () => {
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+      global.fetch = jest.fn().mockResolvedValue({
+        status: 200,
+        text: async () => JSON.stringify({ key: 'K' }),
+      }) as unknown as typeof fetch;
+
+      // Default cap is 10 per 60s. Fire 10 → all 200. The 11th → 429.
+      const reqFromSameIp = () =>
+        makeReq({ group: 'gemini' }, 'GET', {
+          'x-forwarded-for': '203.0.113.5',
+        });
+
+      for (let i = 0; i < 10; i++) {
+        const res = makeRes();
+        await handler(reqFromSameIp(), res);
+        expect(res.statusCode).toBe(200);
+      }
+      const throttled = makeRes();
+      await handler(reqFromSameIp(), throttled);
+      expect(throttled.statusCode).toBe(429);
+      expect(throttled.body).toEqual({ error: 'rate limit exceeded' });
+      // Retry-After tells the client how long to back off.
+      expect(throttled.headers['Retry-After']).toBeDefined();
+    });
+
+    it('per-IP: a fresh IP is not blocked when another IP hit its cap', async () => {
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+      global.fetch = jest.fn().mockResolvedValue({
+        status: 200,
+        text: async () => JSON.stringify({ key: 'K' }),
+      }) as unknown as typeof fetch;
+
+      // IP 'noisy' fills up its bucket.
+      for (let i = 0; i < 10; i++) {
+        const res = makeRes();
+        await handler(
+          makeReq({ group: 'gemini' }, 'GET', {
+            'x-forwarded-for': '203.0.113.9',
+          }),
+          res,
+        );
+        expect(res.statusCode).toBe(200);
+      }
+      // Different IP still gets in — the rate limit is per-IP, not global.
+      const fresh = makeRes();
+      await handler(
+        makeReq({ group: 'gemini' }, 'GET', {
+          'x-forwarded-for': '198.51.100.7',
+        }),
+        fresh,
+      );
+      expect(fresh.statusCode).toBe(200);
+    });
+
+    it('parses x-forwarded-for correctly when Vercel appends multiple hops', async () => {
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+      global.fetch = jest.fn().mockResolvedValue({
+        status: 200,
+        text: async () => JSON.stringify({ key: 'K' }),
+      }) as unknown as typeof fetch;
+
+      // Vercel's edge network can populate x-forwarded-for with
+      // "client, hop1, hop2". We treat the first entry as the caller.
+      const ip = '203.0.113.11';
+      const withHops = { 'x-forwarded-for': `${ip}, 10.0.0.1, 10.0.0.2` };
+
+      for (let i = 0; i < 10; i++) {
+        const res = makeRes();
+        await handler(makeReq({ group: 'gemini' }, 'GET', withHops), res);
+        expect(res.statusCode).toBe(200);
+      }
+      // Same client IP through the same hops → still gets throttled.
+      const throttled = makeRes();
+      await handler(makeReq({ group: 'gemini' }, 'GET', withHops), throttled);
+      expect(throttled.statusCode).toBe(429);
     });
   });
 });
