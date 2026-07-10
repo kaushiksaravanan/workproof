@@ -77,15 +77,15 @@ function isOriginAllowed(req: VercelRequest): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Per-IP rate limit (in-memory, per Vercel serverless instance).
-//
-// Vercel serverless functions are stateless between cold starts, but a warm
-// instance reuses module-level state across invocations. This gives us a
-// cheap first-line-of-defense against naive abuse: one machine curling
-// /api/vend in a tight loop hits the limit within a warm instance's
-// lifetime. A distributed attacker across many IPs bypasses this — full
-// mitigation needs Vercel KV / Upstash Redis with cross-instance state.
-// Tracked as follow-up work on task #32.
+// Per-IP rate limit — two-tier:
+//   Tier 1 (always on): in-memory per-warm-instance limiter. Catches
+//     naive abuse from one machine on a warm instance. Free.
+//   Tier 2 (optional): Upstash Redis REST for cross-instance state.
+//     Activates when UPSTASH_REDIS_URL + UPSTASH_REDIS_TOKEN are set on
+//     the Vercel project. Uses the sliding-window pattern via INCR on
+//     a per-IP+bucket key with EX = window seconds. Zero SDK; plain fetch.
+//     When the env vars are missing (default), we skip the Upstash call
+//     and rely on the in-memory limiter alone — deploy stays trivial.
 // ---------------------------------------------------------------------------
 
 const RATE_LIMIT_MAX = Number(process.env.VEND_RATE_LIMIT_MAX ?? "10");
@@ -105,6 +105,58 @@ const rateLimitState = new Map<string, number[]>();
 // each other's request budget; salting bounds the damage to this warm
 // instance's lifetime.
 const unknownSalt = Math.random().toString(36).slice(2);
+
+const UPSTASH_URL = process.env.UPSTASH_REDIS_URL;
+const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_TOKEN;
+const UPSTASH_ENABLED = Boolean(UPSTASH_URL && UPSTASH_TOKEN);
+
+/**
+ * Cross-instance rate check via Upstash Redis REST. Returns `{ ok: true }`
+ * when the caller is under the cap for the current fixed window, or
+ * `{ ok: false, retryAfterSec }` when over. Silently no-ops (returns
+ * ok=true) if Upstash isn't configured OR the REST call fails — the
+ * in-memory limiter is the enforcement floor and stays authoritative.
+ */
+async function upstashRateCheck(
+  key: string,
+  now: number,
+): Promise<{ ok: true } | { ok: false; retryAfterSec: number }> {
+  if (!UPSTASH_ENABLED) return { ok: true };
+  // Fixed-window bucket key: floor(now / window). Same caller in same
+  // window shares the counter. Rolling to the next window resets it.
+  const bucket = Math.floor(now / RATE_LIMIT_WINDOW_MS);
+  const redisKey = `vend:rl:${key}:${bucket}`;
+  const windowSec = Math.max(1, Math.ceil(RATE_LIMIT_WINDOW_MS / 1000));
+  try {
+    // Upstash REST pipeline: INCR the key then EXPIRE if it's a new one.
+    // We issue two calls in one pipeline round-trip.
+    const res = await fetch(`${UPSTASH_URL}/pipeline`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${UPSTASH_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify([
+        ["INCR", redisKey],
+        ["EXPIRE", redisKey, String(windowSec)],
+      ]),
+    });
+    if (!res.ok) return { ok: true }; // silent no-op on Upstash failure
+    const body = (await res.json()) as Array<{ result: number }>;
+    const count = body?.[0]?.result ?? 0;
+    if (count > RATE_LIMIT_MAX) {
+      // How long until the bucket rolls over.
+      const nextBucketStart = (bucket + 1) * RATE_LIMIT_WINDOW_MS;
+      const retryAfterSec = Math.max(1, Math.ceil((nextBucketStart - now) / 1000));
+      return { ok: false, retryAfterSec };
+    }
+    return { ok: true };
+  } catch {
+    // Network failure to Upstash — fall through, let the in-memory
+    // limiter enforce. Don't block legitimate traffic on a Redis blip.
+    return { ok: true };
+  }
+}
 
 function pruneExpired(key: string, now: number): void {
   const timestamps = rateLimitState.get(key);
@@ -209,6 +261,18 @@ export default async function handler(
   const rate = rateLimit(req);
   if (!rate.ok) {
     res.setHeader("Retry-After", String(rate.retryAfterSec));
+    res.status(429).json({ error: "rate limit exceeded" });
+    return;
+  }
+
+  // Cross-instance check via Upstash (no-op unless UPSTASH_REDIS_URL +
+  // UPSTASH_REDIS_TOKEN are set). Catches distributed abuse that the
+  // per-warm-instance in-memory limiter misses. Silent no-op on Upstash
+  // outage — Upstash isn't a hard dependency.
+  const upstashKey = clientKey(req);
+  const cross = await upstashRateCheck(upstashKey, Date.now());
+  if (!cross.ok) {
+    res.setHeader("Retry-After", String(cross.retryAfterSec));
     res.status(429).json({ error: "rate limit exceeded" });
     return;
   }

@@ -414,4 +414,115 @@ describe('/api/vend', () => {
       expect(res.statusCode).toBe(200);
     });
   });
+
+  describe('Upstash cross-instance rate limit', () => {
+    // These tests exercise the cross-instance path by setting the Upstash
+    // env vars and swapping the fetch mock to serve BOTH the Upstash and
+    // CipherStack call sites. The module reads UPSTASH_ENABLED at import
+    // time, so we need jest.isolateModules to re-import the handler.
+
+    afterEach(() => {
+      delete process.env.UPSTASH_REDIS_URL;
+      delete process.env.UPSTASH_REDIS_TOKEN;
+    });
+
+    it('allows through when Upstash INCR returns a count under the cap', async () => {
+      process.env.UPSTASH_REDIS_URL = 'https://redis.example';
+      process.env.UPSTASH_REDIS_TOKEN = 'token';
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+
+      // First fetch call = Upstash INCR pipeline; second = CipherStack
+      // vend. Order matters: the handler checks Upstash BEFORE forwarding.
+      const fetchMock = jest
+        .fn()
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => [{ result: 3 }, { result: 1 }],
+        })
+        .mockResolvedValueOnce({
+          status: 200,
+          text: async () => JSON.stringify({ key: 'K' }),
+        });
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      let localHandler: typeof handler = handler;
+      jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        localHandler = require('../vend').default;
+      });
+
+      const res = makeRes();
+      await localHandler(
+        makeReq({ group: 'gemini' }, 'GET', { 'x-real-ip': '198.51.100.1' }),
+        res,
+      );
+      expect(res.statusCode).toBe(200);
+      // First fetch call went to Upstash (pipeline endpoint), second to CipherStack.
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://redis.example/pipeline',
+      );
+    });
+
+    it('blocks with 429 + Retry-After when Upstash INCR returns count > cap', async () => {
+      process.env.UPSTASH_REDIS_URL = 'https://redis.example';
+      process.env.UPSTASH_REDIS_TOKEN = 'token';
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+
+      const fetchMock = jest.fn().mockResolvedValueOnce({
+        ok: true,
+        // Cap is 10 (default). Return 15 → over the cap.
+        json: async () => [{ result: 15 }, { result: 1 }],
+      });
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      let localHandler: typeof handler = handler;
+      jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        localHandler = require('../vend').default;
+      });
+
+      const res = makeRes();
+      await localHandler(
+        makeReq({ group: 'gemini' }, 'GET', { 'x-real-ip': '198.51.100.2' }),
+        res,
+      );
+      expect(res.statusCode).toBe(429);
+      expect(res.body).toEqual({ error: 'rate limit exceeded' });
+      expect(res.headers['Retry-After']).toBeDefined();
+      // Upstash was called; CipherStack was NOT (we blocked before the forward).
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('silently falls through when Upstash fetch fails (Redis outage)', async () => {
+      process.env.UPSTASH_REDIS_URL = 'https://redis.example';
+      process.env.UPSTASH_REDIS_TOKEN = 'token';
+      process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
+
+      const fetchMock = jest
+        .fn()
+        // Upstash call rejects (Redis is down).
+        .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+        // CipherStack vend still succeeds.
+        .mockResolvedValueOnce({
+          status: 200,
+          text: async () => JSON.stringify({ key: 'K' }),
+        });
+      global.fetch = fetchMock as unknown as typeof fetch;
+
+      let localHandler: typeof handler = handler;
+      jest.isolateModules(() => {
+        // eslint-disable-next-line @typescript-eslint/no-var-requires
+        localHandler = require('../vend').default;
+      });
+
+      const res = makeRes();
+      await localHandler(
+        makeReq({ group: 'gemini' }, 'GET', { 'x-real-ip': '198.51.100.3' }),
+        res,
+      );
+      // Should NOT reject the request just because Redis is unreachable.
+      // In-memory limiter is still authoritative; caller gets served.
+      expect(res.statusCode).toBe(200);
+    });
+  });
 });
