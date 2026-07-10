@@ -262,3 +262,106 @@ describe('Home', () => {
     });
   });
 });
+
+describe('countThisWeek — pure helper (edge cases)', () => {
+  const { countThisWeek } = require('../Home') as {
+    countThisWeek: (records: WorkRecord[]) => number;
+  };
+
+  it('returns 0 for an empty array', () => {
+    expect(countThisWeek([])).toBe(0);
+  });
+
+  it('counts records with createdAt = now', () => {
+    const now = new Date().toISOString();
+    expect(countThisWeek([makeRecord({ id: 'a', createdAt: now })])).toBe(1);
+  });
+
+  it('excludes records with createdAt from ~30 days ago', () => {
+    const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+    expect(
+      countThisWeek([makeRecord({ id: 'a', createdAt: oneMonthAgo })]),
+    ).toBe(0);
+  });
+
+  it('excludes records with an invalid createdAt (dayjs isValid() false)', () => {
+    expect(
+      countThisWeek([makeRecord({ id: 'a', createdAt: 'not-a-date' })]),
+    ).toBe(0);
+  });
+
+  it('counts mixed records correctly (2 this week + 1 old)', () => {
+    const now = new Date().toISOString();
+    const oldDate = new Date(Date.now() - 60 * 24 * 60 * 60 * 1000).toISOString();
+    const records = [
+      makeRecord({ id: 'a', createdAt: now }),
+      makeRecord({ id: 'b', createdAt: now }),
+      makeRecord({ id: 'c', createdAt: oldDate }),
+    ];
+    expect(countThisWeek(records)).toBe(2);
+  });
+});
+
+describe('countAnchored — pure helper (edge cases)', () => {
+  const { countAnchored } = require('../Home') as {
+    countAnchored: (records: WorkRecord[]) => number;
+  };
+
+  it('returns 0 for an empty array', () => {
+    expect(countAnchored([])).toBe(0);
+  });
+
+  it('returns 0 when nothing is anchored', () => {
+    expect(
+      countAnchored([
+        makeRecord({ id: 'a' }),
+        makeRecord({ id: 'b' }),
+      ]),
+    ).toBe(0);
+  });
+
+  it('counts a fully anchored record (anchorTxHash + anchorChainId set)', () => {
+    expect(
+      countAnchored([
+        makeRecord({ id: 'a', anchorTxHash: '0xdead', anchorChainId: 80002 }),
+      ]),
+    ).toBe(1);
+  });
+
+  it("does NOT count a 'queued:' synthetic tx (offline queue placeholder)", () => {
+    // isAnchored rejects the 'queued:' prefix — proofs waiting to flush don't
+    // count as anchored on the Home stat card. Verified in utils/record.test.ts;
+    // this test pins the propagation through Home.tsx's stat aggregator.
+    expect(
+      countAnchored([
+        makeRecord({
+          id: 'a',
+          anchorTxHash: 'queued:0xabc',
+          anchorChainId: 80002,
+        }),
+      ]),
+    ).toBe(0);
+  });
+
+  it('counts mixed records correctly (2 anchored, 1 queued, 1 pending)', () => {
+    const records = [
+      makeRecord({
+        id: 'a',
+        anchorTxHash: '0x11',
+        anchorChainId: 80002,
+      }),
+      makeRecord({
+        id: 'b',
+        anchorTxHash: '0x22',
+        anchorChainId: 80002,
+      }),
+      makeRecord({
+        id: 'c',
+        anchorTxHash: 'queued:0x33',
+        anchorChainId: 80002,
+      }),
+      makeRecord({ id: 'd' }),
+    ];
+    expect(countAnchored(records)).toBe(2);
+  });
+});
