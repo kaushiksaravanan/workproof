@@ -207,20 +207,33 @@ export async function getAnchorStatus(txHash: string): Promise<AnchorStatus> {
  * Drain the offline queue, attempting to anchor each hash on-chain.
  *
  * Crash-safe: reads the queue WITHOUT clearing it, then removes each hash
- * from the queue only AFTER its on-chain submission succeeds. If the OS
- * kills the app mid-drain (iOS/Android can terminate a backgrounded RN app
- * during a long tx.wait), unprocessed items remain in AsyncStorage and the
- * next flush retries them. Concurrent `enqueueHash` calls during a flush
- * are no-ops for hashes currently being processed, because the dedup guard
- * in enqueueHash sees the hash still in the queue.
+ * from the queue only AFTER its on-chain submission succeeds AND (if a
+ * reconcile callback was provided) the local record state has been updated.
+ * If the OS kills the app mid-drain, unprocessed items remain in
+ * AsyncStorage and the next flush retries them.
+ *
+ * The `reconcile` callback, if passed, is invoked AFTER the on-chain success
+ * but BEFORE the queue-remove step. This ordering means: crashes between
+ * anchor-success and queue-remove result in a re-anchor next flush (harmless
+ * on the idempotent contract; a small gas cost on mainnet), but the local
+ * record state is never left stuck at "queued" when the on-chain tx has
+ * actually landed. Without the callback, callers can still reconcile from
+ * the returned results but risk data loss if the process is killed between
+ * flushQueue returning and their reconcile step completing.
+ *
+ * Concurrent `enqueueHash` calls during a flush are no-ops for hashes
+ * currently being processed, because the dedup guard in enqueueHash sees
+ * the hash still in the queue.
  *
  * Returns the list of successful anchor results paired with the originating
- * hash so callers can reconcile to record state; failed hashes stay in the
- * queue for a future flush.
+ * hash. Failed hashes stay in the queue for a future flush.
  */
-export async function flushQueue(): Promise<
-  Array<{ hashHex: string; result: AnchorResult }>
-> {
+export async function flushQueue(
+  reconcile?: (
+    hashHex: string,
+    result: AnchorResult,
+  ) => Promise<void>,
+): Promise<Array<{ hashHex: string; result: AnchorResult }>> {
   if (!ANCHOR_CONTRACT_ADDRESS || !HACKATHON_DEMO_KEY) {
     return [];
   }
@@ -241,9 +254,23 @@ export async function flushQueue(): Promise<
       assertValidHash(hashHex);
       const result = await _anchorOnChain(hashHex);
       results.push({ hashHex, result });
-      // Remove this hash from the queue now that it's confirmed anchored.
-      // Under the lock so a concurrent enqueue can't get lost in a
-      // read-modify-write race.
+      // Reconcile the record BEFORE removing from the queue. If we crash
+      // between anchor and reconcile, next flush re-anchors (idempotent);
+      // the record never gets stuck in the "queued locally but anchored
+      // on-chain" divergence.
+      if (reconcile) {
+        try {
+          await reconcile(hashHex, result);
+        } catch {
+          // Reconcile failure: leave the hash in the queue so the next
+          // flush retries the whole sequence. Better a duplicate on-chain
+          // event than a permanently-diverged local record.
+          continue;
+        }
+      }
+      // Remove this hash from the queue now that both the on-chain anchor
+      // and the local reconcile have succeeded. Under the lock so a
+      // concurrent enqueue can't get lost in a read-modify-write race.
       await withQueueLock(async () => {
         const current = await getQueue();
         await setQueue(current.filter((h) => h !== hashHex));

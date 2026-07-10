@@ -391,4 +391,57 @@ describe('flushQueue', () => {
     // Second item failed → stays in queue for next flush retry.
     expect(await getQueue()).toEqual([anotherHash]);
   });
+
+  it('reconcile callback fires BEFORE the queue-remove step (crash-safe ordering)', async () => {
+    // The callback runs after on-chain success but before removing the hash
+    // from the queue. Verify by checking that at the moment the callback
+    // fires, the hash is still in the queue.
+    mockConfigured = true;
+    mockAnchorImpl = async () => ({
+      hash: '0xok',
+      wait: async () => undefined,
+    });
+    await AsyncStorage.setItem(
+      '@workproof/anchor-queue',
+      JSON.stringify([validHash]),
+    );
+    const { flushQueue, getQueue } = importAnchor();
+    let queueAtReconcile: string[] | null = null;
+    const reconcile = async (): Promise<void> => {
+      queueAtReconcile = await getQueue();
+    };
+    const results = await flushQueue(reconcile);
+    expect(results).toHaveLength(1);
+    // At reconcile time, the hash was still in the queue (order: anchor →
+    // reconcile → remove). This is the crash-safe ordering that prevents
+    // the "anchored on-chain but stuck as queued locally" divergence.
+    expect(queueAtReconcile).toEqual([validHash]);
+    // After the whole flow, it's gone.
+    expect(await getQueue()).toEqual([]);
+  });
+
+  it('reconcile failure leaves the hash in the queue for retry', async () => {
+    // If the reconcile callback throws (local state update failed), we do
+    // NOT remove the hash from the queue. Next flush re-anchors (harmless
+    // idempotent op on-chain) and retries reconcile. Better to double-anchor
+    // than to permanently diverge from on-chain truth.
+    mockConfigured = true;
+    mockAnchorImpl = async () => ({
+      hash: '0xok',
+      wait: async () => undefined,
+    });
+    await AsyncStorage.setItem(
+      '@workproof/anchor-queue',
+      JSON.stringify([validHash]),
+    );
+    const { flushQueue, getQueue } = importAnchor();
+    const reconcile = async (): Promise<void> => {
+      throw new Error('setAnchored blew up');
+    };
+    const results = await flushQueue(reconcile);
+    // The anchor DID succeed on-chain, so we still return it in results.
+    expect(results).toHaveLength(1);
+    // But the queue-remove step was skipped, so it's still there for retry.
+    expect(await getQueue()).toEqual([validHash]);
+  });
 });

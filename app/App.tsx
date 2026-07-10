@@ -14,6 +14,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ThemeProvider, useAppFonts, colors, defaultTheme } from './src/theme';
 import type { RootStackParamList } from './src/navigation/types';
+import type { AnchorResult } from './src/types';
 import { Onboarding } from './src/screens/Onboarding';
 import { Home } from './src/screens/Home';
 import { LogWork } from './src/screens/LogWork';
@@ -80,11 +81,20 @@ export default function App(): React.ReactElement {
 
     const drainQueueAndReconcile = async (): Promise<void> => {
       try {
-        const results = await flushQueue();
-        if (cancelled || results.length === 0) return;
-        const records = useWorkStore.getState().records;
-        const setAnchored = useWorkStore.getState().setAnchored;
-        await reconcileAnchoredHashes(results, records, setAnchored);
+        // Pass a per-hash reconcile callback so flushQueue can update the
+        // local record BEFORE removing the hash from the persistent queue.
+        // This closes the "anchored on-chain but stuck as queued locally"
+        // divergence that would otherwise happen if the OS killed the app
+        // between flushQueue returning and the reconcile step running.
+        const reconcile = async (
+          hashHex: string,
+          result: AnchorResult,
+        ): Promise<void> => {
+          const records = useWorkStore.getState().records;
+          const setAnchored = useWorkStore.getState().setAnchored;
+          await reconcileAnchoredHashes([{ hashHex, result }], records, setAnchored);
+        };
+        await flushQueue(reconcile);
       } catch {
         // Drain failures are non-fatal; we'll retry next foreground.
       }
