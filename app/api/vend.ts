@@ -118,29 +118,40 @@ function pruneExpired(key: string, now: number): void {
 }
 
 function clientKey(req: VercelRequest): string {
-  // Vercel appends its measured client IP to any client-supplied
-  // x-forwarded-for header, so the TRUSTED entry is the LAST one, not
-  // the first. Reading position 0 (as the naive approach does) lets an
-  // attacker rotate x-forwarded-for on every request to bypass the
-  // rate limit. Take the tail entry instead.
+  // Prefer `x-vercel-forwarded-for` — Vercel sets this to the measured
+  // client IP and it survives even if a user proxy on top of Vercel
+  // overwrites `x-forwarded-for`. Fall back to `x-forwarded-for`, then
+  // `x-real-ip`, then a per-warm-instance salt bucket for callers we
+  // genuinely can't identify.
+  //
+  // Vercel's docs: https://vercel.com/docs/edge-network/headers/request-headers
+  // 'we currently overwrite the X-Forwarded-For header and do not
+  //  forward external IPs. This restriction is in place to prevent IP
+  //  spoofing.'
+  //
+  // So on Vercel this is normally a single trusted IP. On other hosts
+  // (Vercel Enterprise 'Trusted Proxy', Cloudflare-in-front, self-host
+  // behind nginx) trust semantics differ; treat both headers as the
+  // best available signal and comment when this file is redeployed
+  // elsewhere.
+  const vercelIp = req.headers?.["x-vercel-forwarded-for"];
+  const vercelStr = Array.isArray(vercelIp) ? vercelIp[0] : vercelIp;
+  if (vercelStr) {
+    const trusted = vercelStr.split(",")[0]?.trim();
+    if (trusted) return trusted;
+  }
   const xff = req.headers?.["x-forwarded-for"];
-  const forwarded = Array.isArray(xff) ? xff[xff.length - 1] : xff;
+  const forwarded = Array.isArray(xff) ? xff[0] : xff;
   if (forwarded) {
-    const parts = forwarded
-      .split(",")
-      .map((s) => s.trim())
-      .filter(Boolean);
-    const trusted = parts[parts.length - 1];
+    const trusted = forwarded.split(",")[0]?.trim();
     if (trusted) return trusted;
   }
   const real = req.headers?.["x-real-ip"];
   const realStr = Array.isArray(real) ? real[0] : real;
   if (realStr) return realStr;
-  // No trustworthy IP identifier at all. Do NOT let all such callers
-  // share the same 'unknown' bucket — that would let an attacker with a
-  // spoofed header amplify the un-rate-limited traffic. Salt the key with
-  // a random-per-instance token so the bucket is at least unique per
-  // warm instance; still not ideal, but not a shared vector either.
+  // No trustworthy IP identifier at all. Salt with a per-instance token
+  // so all such callers don't share a bucket that amplifies their
+  // request budget.
   return `unknown-${unknownSalt}`;
 }
 

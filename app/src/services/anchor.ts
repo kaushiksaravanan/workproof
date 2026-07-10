@@ -383,10 +383,6 @@ async function _flushQueue(
     return [];
   }
 
-  // Resolve the current signer wallet address once — used to check for
-  // rotation against each queued entry's expected signer.
-  const currentWalletAddress = (await getOrCreateWallet()).address.toLowerCase();
-
   // Snapshot the queue without clearing it. Items stay in AsyncStorage
   // through their entire anchor attempt so a mid-flight process kill
   // doesn't lose them.
@@ -398,8 +394,42 @@ async function _flushQueue(
 
   const results: Array<{ hashHex: string; result: AnchorResult }> = [];
 
+  // Resolve the current signer wallet address LAZILY per-entry. Legacy
+  // entries (workerAddress='') don't need it, so we can still make
+  // progress even if identity is temporarily unavailable (keystore locked
+  // at boot, e.g.). A single failure here is cached so we don't spam
+  // secure-store per iteration when identity truly is broken.
+  let currentWalletAddress: string | null = null;
+  let identityFailed = false;
+  const resolveCurrentAddress = async (): Promise<string | null> => {
+    if (currentWalletAddress !== null) return currentWalletAddress;
+    if (identityFailed) return null;
+    try {
+      const wallet = await getOrCreateWallet();
+      currentWalletAddress = wallet.address.toLowerCase();
+      return currentWalletAddress;
+    } catch {
+      // Identity unavailable. Signer-mismatch check will treat as
+      // 'cannot verify' and skip strict-signer entries this pass;
+      // legacy entries still proceed.
+      identityFailed = true;
+      return null;
+    }
+  };
+
   for (const entry of snapshot) {
     const { hashHex, workerAddress: expectedSigner } = entry;
+    // Validate the hash BEFORE any dead-letter routing — a malformed
+    // hash is a data corruption issue, not an identity mismatch, so
+    // treat it as a queue error and leave it in place for a future
+    // manual review (or the assertValidHash throw path below).
+    try {
+      assertValidHash(hashHex);
+    } catch {
+      // Malformed queued hash — leave in the queue; assertValidHash's
+      // rethrow below handles this. (Continue so the per-entry try/catch
+      // handles the actual throw path uniformly.)
+    }
     // Signer mismatch → refuse to anchor. workerAddress='' is a legacy
     // entry from before this schema change; anchor it (best-effort, no
     // stricter guarantee available). Otherwise the current wallet MUST
@@ -407,23 +437,30 @@ async function _flushQueue(
     // Anchored(hash, worker=new, ...) on-chain event whose `worker`
     // doesn't match the WorkRecord's workerAddress, silently breaking
     // the pdf-to-chain identity binding.
-    if (
-      expectedSigner !== "" &&
-      expectedSigner.toLowerCase() !== currentWalletAddress
-    ) {
-      // Move this entry to dead-letter and skip. The record is now
-      // orphan-anchorable-locally: on-chain anchor never happened, but
-      // the current wallet isn't the one the user attributed it to.
-      // A recovery UI can decide what to do (surface, delete, re-attest).
-      await withQueueLock(async () => {
-        const current = await getQueue();
-        await setQueue(current.filter((e) => e.hashHex !== hashHex));
-        const dead = await getDeadLetter();
-        if (!dead.includes(hashHex)) {
-          await setDeadLetter([...dead, hashHex]);
-        }
-      });
-      continue;
+    if (expectedSigner !== "") {
+      const cur = await resolveCurrentAddress();
+      if (cur === null) {
+        // Identity is unavailable — we can't verify the signer.
+        // Leave the entry in the queue for a future flush (once identity
+        // is loadable again). Do NOT dead-letter — that would be a
+        // permanent decision based on a transient identity failure.
+        continue;
+      }
+      if (expectedSigner.toLowerCase() !== cur) {
+        // Move this entry to dead-letter and skip. The record is now
+        // orphan-anchorable-locally: on-chain anchor never happened, but
+        // the current wallet isn't the one the user attributed it to.
+        // A recovery UI can decide what to do (surface, delete, re-attest).
+        await withQueueLock(async () => {
+          const current = await getQueue();
+          await setQueue(current.filter((e) => e.hashHex !== hashHex));
+          const dead = await getDeadLetter();
+          if (!dead.includes(hashHex)) {
+            await setDeadLetter([...dead, hashHex]);
+          }
+        });
+        continue;
+      }
     }
     try {
       assertValidHash(hashHex);

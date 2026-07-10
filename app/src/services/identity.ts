@@ -24,6 +24,36 @@ import { Wallet } from "ethers";
 
 const SECURE_KEY = "workproof-identity-v1";
 
+/**
+ * Typed error the caller can catch to distinguish 'identity unavailable
+ * right now' (retryable, e.g. keystore locked at boot) from generic
+ * failures. UI code should map this to a friendly message instead of
+ * showing the internal 'refusing to rotate the wallet' jargon.
+ */
+export class IdentityUnavailableError extends Error {
+  readonly kind: "read" | "parse" | "persist";
+  constructor(kind: "read" | "parse" | "persist", message: string) {
+    super(message);
+    this.name = "IdentityUnavailableError";
+    this.kind = kind;
+  }
+}
+
+/** User-facing friendly message for an IdentityUnavailableError. */
+export function friendlyIdentityErrorMessage(err: unknown): string {
+  if (err instanceof IdentityUnavailableError) {
+    switch (err.kind) {
+      case "read":
+        return "Your phone's secure storage is locked. Unlock your phone and try again.";
+      case "parse":
+        return "Your phone's secure storage has a corrupted key. Contact support to recover access to your past proofs — please don't reinstall the app first.";
+      case "persist":
+        return "Your phone's secure storage isn't writable right now (usually because it's locked). Unlock your phone and try again.";
+    }
+  }
+  return err instanceof Error ? err.message : "Unknown error";
+}
+
 let cachedWallet: Wallet | null = null;
 let inFlight: Promise<Wallet> | null = null;
 
@@ -54,10 +84,8 @@ async function _loadOrCreate(): Promise<Wallet> {
   try {
     existing = await SecureStore.getItemAsync(SECURE_KEY);
   } catch (err) {
-    // Read failure. Surface as a hard error rather than clobbering the key.
-    // The caller can retry (transient) or route the user through a recovery
-    // flow (persistent corruption).
-    throw new Error(
+    throw new IdentityUnavailableError(
+      "read",
       "Identity read failure: " +
         (err instanceof Error ? err.message : String(err)) +
         ". Refusing to rotate the wallet — this would orphan any past on-chain anchors.",
@@ -65,14 +93,13 @@ async function _loadOrCreate(): Promise<Wallet> {
   }
 
   if (existing !== null) {
-    // Item exists. Try to construct the Wallet. If THIS throws, the item
-    // is unreadable garbage — again, DON'T overwrite it silently.
     try {
       const w = new Wallet(existing);
       cachedWallet = w;
       return w;
     } catch (err) {
-      throw new Error(
+      throw new IdentityUnavailableError(
+        "parse",
         "Identity parse failure: " +
           (err instanceof Error ? err.message : String(err)) +
           ". Refusing to rotate the wallet — the persisted key is unreadable but present, which means overwriting it would orphan any past on-chain anchors made with the previous key.",
@@ -80,18 +107,13 @@ async function _loadOrCreate(): Promise<Wallet> {
     }
   }
 
-  // No item present → genuine first launch. Generate + persist.
   const fresh = Wallet.createRandom();
   const freshKey = fresh.privateKey;
   try {
     await SecureStore.setItemAsync(SECURE_KEY, freshKey);
   } catch {
-    // Persist failure on first launch. Still return a usable wallet for
-    // this session, but do NOT cache it — a cold restart would find no
-    // key and generate another new one, so an anchor made now would be
-    // orphaned on the next launch. Surface an error so the caller can
-    // decide whether to proceed.
-    throw new Error(
+    throw new IdentityUnavailableError(
+      "persist",
       "Identity persist failure on first launch — cannot save the fresh wallet. Anchoring is unsafe until the OS keystore is writable.",
     );
   }

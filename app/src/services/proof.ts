@@ -384,7 +384,9 @@ export function buildProofHtml(rec: WorkRecord): string {
 
     ${
       rec.workerAddress
-        ? `<div class="section-title">Anchored by (worker wallet)</div>
+        ? `<div class="section-title">Worker wallet${
+            anchored ? " (anchored by)" : " (will sign the anchor tx)"
+          }</div>
     <div class="hash-block">${escapeHtml(rec.workerAddress)}</div>`
         : ""
     }

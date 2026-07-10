@@ -23,6 +23,10 @@ import {
 import { useTheme } from '../theme/ThemeProvider';
 import { useWorkStore } from '../state/workStore';
 import { anchorHash, explorerUrl } from '../services/anchor';
+import {
+  IdentityUnavailableError,
+  friendlyIdentityErrorMessage,
+} from '../services/identity';
 import { generateProofPdf, shareProofPdf } from '../services/proof';
 import type { RootStackParamList } from '../navigation/types';
 import type { WorkRecord } from '../types';
@@ -429,7 +433,14 @@ export function ProofDetail({
         : 'Proof anchored on-chain';
       AccessibilityInfo.announceForAccessibility(msg);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Anchor failed';
+      // Identity failures get a friendly message; anything else uses the
+      // raw message (RPC / config / etc.).
+      const msg =
+        err instanceof IdentityUnavailableError
+          ? friendlyIdentityErrorMessage(err)
+          : err instanceof Error
+            ? err.message
+            : 'Anchor failed';
       AccessibilityInfo.announceForAccessibility(`Anchor failed: ${msg}`);
       Alert.alert('Anchor failed', msg);
     } finally {

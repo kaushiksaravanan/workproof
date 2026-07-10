@@ -42,7 +42,11 @@ import { useReducedMotion } from '../theme/useReducedMotion';
 import { useWorkStore } from '../state/workStore';
 import { extractWorkFields } from '../services/llm';
 import { hashRecord } from '../services/hashing';
-import { getOrCreateWallet } from '../services/identity';
+import {
+  getOrCreateWallet,
+  IdentityUnavailableError,
+  friendlyIdentityErrorMessage,
+} from '../services/identity';
 import * as media from '../services/media';
 import type { ExtractedFields, WorkRecord } from '../types';
 import type { RootStackParamList } from '../navigation/types';
@@ -841,10 +845,15 @@ export function LogWork({ navigation }: LogWorkProps): React.ReactElement {
         navigation.replace('ProofDetail', { id });
       });
     } catch (err) {
+      // Identity errors get a friendly, actionable message. Anything else
+      // falls back to the raw error text (which is still shorter than the
+      // identity module's internal jargon, so acceptable).
       const message =
-        err instanceof Error
-          ? err.message
-          : 'We could not save this proof. Please try again.';
+        err instanceof IdentityUnavailableError
+          ? friendlyIdentityErrorMessage(err)
+          : err instanceof Error
+            ? err.message
+            : 'We could not save this proof. Please try again.';
       AccessibilityInfo.announceForAccessibility(`Save failed. ${message}`);
       if (mountedRef.current) {
         Alert.alert('Save failed', message);

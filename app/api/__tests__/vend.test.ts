@@ -308,43 +308,39 @@ describe('/api/vend', () => {
       expect(fresh.statusCode).toBe(200);
     });
 
-    it('parses x-forwarded-for by taking the TAIL (Vercel-appended IP), not the head', async () => {
-      // Regression: previously we took the FIRST entry of x-forwarded-for
-      // as the trusted client IP. That's the WRONG entry — Vercel APPENDS
-      // its measured client IP to any client-supplied XFF, so an attacker
-      // could rotate the first entry on every request and permanently
-      // bypass the rate limit while all traffic actually came from one
-      // real IP that Vercel dutifully added at the end. Fix: read the
-      // tail entry instead.
+    it('prefers x-vercel-forwarded-for over x-forwarded-for (survives XFF-overwriting proxies)', async () => {
+      // Vercel actually OVERWRITES x-forwarded-for with its measured client
+      // IP (does NOT append). But a user proxy on top of Vercel can
+      // overwrite XFF a second time. `x-vercel-forwarded-for` survives
+      // that scenario. Verify we key on the Vercel header when present.
       process.env.CIPHERSTACK_TOKEN = 'csk_test_token';
       global.fetch = jest.fn().mockResolvedValue({
         status: 200,
         text: async () => JSON.stringify({ key: 'K' }),
       }) as unknown as typeof fetch;
 
-      const attackerIp = '203.0.113.66';
+      const trustedIp = '203.0.113.66';
 
-      // Rotate a fake 'client' entry on every call — the actual Vercel-
-      // measured IP is always the tail. Prior to the fix, this loop
-      // would forever bypass the cap by giving each request a fresh
-      // 'client key'. Post-fix: the tail is the same on every call,
-      // so the cap fires after the 10th request.
+      // Client sends a spoofed x-forwarded-for on every request, but
+      // Vercel's own header stays stable — we should key on Vercel's.
       for (let i = 0; i < 10; i++) {
         const res = makeRes();
         await handler(
           makeReq({ group: 'gemini' }, 'GET', {
-            'x-forwarded-for': `spoof-${i}, ${attackerIp}`,
+            'x-forwarded-for': `spoof-${i}`,
+            'x-vercel-forwarded-for': trustedIp,
           }),
           res,
         );
         expect(res.statusCode).toBe(200);
       }
-      // 11th request with a fresh spoof — still throttled, because we
-      // key on the trusted tail entry.
+      // 11th request with a fresh XFF spoof — still throttled, because
+      // we key on x-vercel-forwarded-for.
       const throttled = makeRes();
       await handler(
         makeReq({ group: 'gemini' }, 'GET', {
-          'x-forwarded-for': `spoof-final, ${attackerIp}`,
+          'x-forwarded-for': 'spoof-final',
+          'x-vercel-forwarded-for': trustedIp,
         }),
         throttled,
       );
