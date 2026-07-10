@@ -15,7 +15,8 @@ Field-ready proof-of-work capture for crews and contractors. Snap a photo, recor
 WorkProof turns a 30-second site walkthrough into a tamper-evident record:
 
 - **Photo + voice + location** captured in a single flow.
-- **Audio + editable transcript** — the voice memo is the reference; the crew types the short report in an editable transcript field. An on-device regex extractor pulls work type / client / amounts from that text.
+- **Audio + editable transcript** — the voice memo is the reference; the crew types the short report in an editable transcript field. An on-device regex extractor pulls work type / client / amounts from that text; a Gemini path (via `/api/vend` — token stays server-side) fills in what regex misses.
+- **Cross-language proof (Gemini translate)** — the crew can dictate in Kannada / Tamil / Hindi / Marathi and tap Translate to add an English (or any target language) version to the same record. The PDF renders BOTH the original and the translation. Solves the absentee-client-doesn't-read-my-language friction that most field-crew tools ignore.
 - **Canonical SHA-256 hash** binds the bundle (fields + photo bytes + audio bytes + this install's worker address) so tampering is detectable. Each install has its own on-chain identity (secp256k1 wallet generated on first launch, persisted in `expo-secure-store`), so anchor txs are attributable to the worker who signed them.
 - **PDF export + share sheet** so the proof leaves the device through whatever channel the crew already uses (WhatsApp, email, SMS).
 
