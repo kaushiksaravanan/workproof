@@ -100,7 +100,7 @@ Set the following env vars on the Vercel project. **Do not use the `EXPO_PUBLIC_
 - Allow-lists 10 CipherStack groups: `gemini`, `openrouter`, `huggingface`, `mistral`, `groq`, `nvidia`, `cerebras`, `cohere`, `github-models`, `cloudflare-ai`.
 - Forwards to `https://cipherstack.kaushik.cv/api/v1/vend/<group>` with the bearer token and passes the response through.
 
-On web, `vendGeminiKey()` calls `/api/vend?group=gemini` (same-origin, no Authorization header). On native, it hits CipherStack directly using the bundled `EXPO_PUBLIC_CIPHERSTACK_TOKEN` (accepted APK-extractable exposure).
+On web, `vendGeminiKey()` calls `/api/vend?group=gemini` (same-origin, no Authorization header). On native, it hits CipherStack directly using the bundled `EXPO_PUBLIC_CIPHERSTACK_TOKEN` (accepted APK-extractable exposure). Note: `vendGeminiKey` is exported and unit-tested (see below), but the LogWork extraction call currently pins `online: false`, so this path isn't reached from the shipping app UI without a code change.
 
 Tested at `api/__tests__/vend.test.ts` — 11 cases covering missing group, invalid group, missing env var, non-GET/HEAD 405, HEAD 200, bearer-header forwarding, upstream status pass-through, non-JSON upstream, network failure, and array-valued query params.
 
