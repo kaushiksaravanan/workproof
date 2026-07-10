@@ -332,17 +332,17 @@ describe('flushQueue', () => {
   });
 
   it('merge-dedupes: a failed hash re-queued during the network window does not double-list', async () => {
-    // Simulate the race: flushQueue takes a snapshot of [validHash], tries
-    // to anchor it (fails). While that's happening, anchorHash(validHash)
-    // is called again from the UI ('Retry anchor' tap), which enqueues
-    // validHash into the now-empty queue → current queue = [validHash].
-    // flushQueue's merge step must dedupe so the queue doesn't end up as
-    // [validHash, validHash].
+    // With the crash-safe remove-on-success design, the queue is not drained
+    // up front — items stay put until anchored. So if anchorHash(validHash)
+    // is called again during a slow tx.wait(), enqueueHash's dedup guard sees
+    // validHash still in the queue and skips the re-add. Net: queue stays as
+    // [validHash] regardless of retry attempts. Verify.
     mockConfigured = true;
     mockAnchorImpl = async () => {
-      // Simulate a re-enqueue during the network window. Directly writing
-      // through the storage layer is the simplest way to model 'another
-      // caller enqueued while we were awaiting the tx'.
+      // Simulate concurrent re-enqueue during the network window. Since the
+      // hash is still in the queue (not drained), enqueueHash's includes()
+      // guard skips the push — this direct write emulates 'someone called
+      // enqueueHash and it correctly no-op'd'.
       await AsyncStorage.setItem(
         '@workproof/anchor-queue',
         JSON.stringify([validHash]),
@@ -356,8 +356,39 @@ describe('flushQueue', () => {
     const { flushQueue, getQueue } = importAnchor();
     const results = await flushQueue();
     expect(results).toEqual([]);
-    // The naive `[...failed, ...current]` would have produced
-    // [validHash, validHash]; the dedup step collapses it to one.
+    // Queue still has exactly one entry — no duplicates, no data loss.
     expect(await getQueue()).toEqual([validHash]);
+  });
+
+  it('crash-safe: unprocessed items remain in the queue if the loop exits early', async () => {
+    // Regression scenario: OS kills the app mid-flush (e.g., iOS terminates
+    // a backgrounded RN app during a long tx.wait). With the old drain-first
+    // design, snapshot items were removed BEFORE anchor confirmation, so a
+    // process kill mid-loop lost them. New design: items stay in the queue
+    // until each is confirmed anchored, so a killed flush leaves them intact.
+    //
+    // We simulate 'killed mid-loop' by throwing on the SECOND anchor after
+    // the FIRST succeeds. The first item's success removes it; the second
+    // stays. If the flush is later retried, the queue is [second only].
+    mockConfigured = true;
+    let call = 0;
+    mockAnchorImpl = async () => {
+      call += 1;
+      if (call === 1) {
+        return { hash: '0xok', wait: async () => undefined };
+      }
+      throw new Error('killed');
+    };
+    await AsyncStorage.setItem(
+      '@workproof/anchor-queue',
+      JSON.stringify([validHash, anotherHash]),
+    );
+    const { flushQueue, getQueue } = importAnchor();
+    const results = await flushQueue();
+    // First item confirmed anchored → returned in results, removed from queue.
+    expect(results).toHaveLength(1);
+    expect(results[0].hashHex).toBe(validHash);
+    // Second item failed → stays in queue for next flush retry.
+    expect(await getQueue()).toEqual([anotherHash]);
   });
 });

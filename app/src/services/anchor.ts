@@ -206,14 +206,17 @@ export async function getAnchorStatus(txHash: string): Promise<AnchorStatus> {
 /**
  * Drain the offline queue, attempting to anchor each hash on-chain.
  *
- * Race-safe: takes the queue snapshot under the mutex, drops it, runs the
- * on-chain submissions OUTSIDE the lock, then re-acquires the lock to merge
- * any hashes that arrived during the long network round-trips with the
- * unprocessed remainder.
+ * Crash-safe: reads the queue WITHOUT clearing it, then removes each hash
+ * from the queue only AFTER its on-chain submission succeeds. If the OS
+ * kills the app mid-drain (iOS/Android can terminate a backgrounded RN app
+ * during a long tx.wait), unprocessed items remain in AsyncStorage and the
+ * next flush retries them. Concurrent `enqueueHash` calls during a flush
+ * are no-ops for hashes currently being processed, because the dedup guard
+ * in enqueueHash sees the hash still in the queue.
  *
  * Returns the list of successful anchor results paired with the originating
- * hash so callers can reconcile to record state; failed hashes are
- * re-enqueued for a future flush.
+ * hash so callers can reconcile to record state; failed hashes stay in the
+ * queue for a future flush.
  */
 export async function flushQueue(): Promise<
   Array<{ hashHex: string; result: AnchorResult }>
@@ -222,47 +225,34 @@ export async function flushQueue(): Promise<
     return [];
   }
 
-  // Snapshot + clear under the lock so concurrent writers don't see the
-  // hashes we're about to process and re-enqueue them.
+  // Snapshot the queue without clearing it. Items stay in AsyncStorage
+  // through their entire anchor attempt so a mid-flight process kill
+  // doesn't lose them.
   const snapshot = await withQueueLock(async () => {
-    const queue = await getQueue();
-    if (queue.length === 0) return [] as string[];
-    await setQueue([]);
-    return queue;
+    return await getQueue();
   });
 
   if (snapshot.length === 0) return [];
 
   const results: Array<{ hashHex: string; result: AnchorResult }> = [];
-  const failed: string[] = [];
 
   for (const hashHex of snapshot) {
     try {
       assertValidHash(hashHex);
       const result = await _anchorOnChain(hashHex);
       results.push({ hashHex, result });
+      // Remove this hash from the queue now that it's confirmed anchored.
+      // Under the lock so a concurrent enqueue can't get lost in a
+      // read-modify-write race.
+      await withQueueLock(async () => {
+        const current = await getQueue();
+        await setQueue(current.filter((h) => h !== hashHex));
+      });
     } catch {
-      failed.push(hashHex);
+      // Leave the failed hash in the queue for a future flush. No merge
+      // step needed — items are removed on success, not batch-rewritten.
     }
   }
-
-  // Merge failures with anything queued during the network window above.
-  // Dedupe: `current` was populated via enqueueHash's dedup guard, but if the
-  // same record's hash appears in BOTH `failed` (from the snapshot we drained)
-  // AND `current` (freshly enqueued during the network wait), the naive
-  // concat would resurrect a duplicate.
-  await withQueueLock(async () => {
-    const current = await getQueue();
-    const merged = [...failed, ...current];
-    const seen = new Set<string>();
-    const deduped: string[] = [];
-    for (const h of merged) {
-      if (seen.has(h)) continue;
-      seen.add(h);
-      deduped.push(h);
-    }
-    await setQueue(deduped);
-  });
 
   return results;
 }
